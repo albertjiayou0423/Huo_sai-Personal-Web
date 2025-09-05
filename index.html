@@ -110,7 +110,7 @@
     
     /* Shape-specific border radius for the arc */
     .indicator-is-circle .indicator-arc { border-radius: 50%; }
-    .indicator-is-rounded-square .indicator-arc { border-radius: 20%; }
+    .indicator-is-rounded-square .indicator-arc { border-radius: 14.3%; }
 
     /* Styling for the "avoiding" state */
     .indicator-avoiding .indicator-arc {
@@ -123,6 +123,7 @@
       position: absolute;
       top: -4px;
       left: 50%;
+      transform: translateX(-50%);
       width: 0;
       height: 0;
       border-left: 6px solid transparent;
@@ -146,34 +147,91 @@
       animation: pulse-red-bg-soft 1.5s infinite;
     }
 
-    /* Styles for the circle gesture progress indicator */
-    .circle-progress-container {
-        position: fixed;
-        width: 64px;
-        height: 64px;
-        border-radius: 50%;
-        background-color: rgba(255, 255, 255, 0.2);
-        backdrop-filter: blur(2px);
-        border: 1px solid rgba(255, 255, 255, 0.3);
-        transform: translate(-50%, -50%) scale(0);
+    /* --- NEW: Internal Arrow Style --- */
+    .internal-arrow {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 0;
+      height: 0;
+      border-top: 7px solid transparent;
+      border-bottom: 7px solid transparent;
+      border-left: 11px solid var(--arrow-color);
+      opacity: 0.7;
+    }
+
+    /* Styles for the full-screen vignette progress indicator */
+    .vignette-progress {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 50;
+      box-shadow: inset 0 0 var(--vignette-size, 200px) 50px rgba(251, 191, 36, 0.4); /* yellow-400 with opacity */
+      opacity: 0;
+      transition: opacity 0.3s ease-out, box-shadow 0.1s linear;
+    }
+    .vignette-progress.visible {
+      opacity: 1;
+    }
+
+    /* --- NEW: Toast Notification Animation --- */
+    @keyframes toast-in-right {
+      from {
+        transform: translateX(100%);
         opacity: 0;
-        transition: transform 0.2s ease-out, opacity 0.2s ease-out;
-        pointer-events: none;
-        z-index: 51;
-    }
-    .circle-progress-container.visible {
-        transform: translate(-50%, -50%) scale(1);
+      }
+      to {
+        transform: translateX(0);
         opacity: 1;
+      }
     }
-    .circle-progress-bar {
-        width: 100%;
-        height: 100%;
-        border-radius: 50%;
-        background: conic-gradient(
-            #fbbf24 var(--progress, 0deg),
-            transparent var(--progress, 0deg)
-        );
-        transition: background 0.1s linear;
+    .animate-toast-in-right {
+      animation: toast-in-right 0.5s cubic-bezier(0.21, 1.02, 0.73, 1) forwards;
+    }
+
+    /* --- NEW: Trajectory Path Dot Style --- */
+    .path-dot {
+      position: absolute;
+      border-radius: 50%;
+      pointer-events: none;
+      transition: opacity 0.2s ease-out;
+      will-change: transform, opacity;
+    }
+
+    /* --- NEW: Orientation Dot Style & Animations --- */
+    @keyframes pulse-dot {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.2); }
+    }
+
+    .orientation-dot {
+      position: absolute;
+      top: 15%;
+      right: 15%;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      pointer-events: none;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.3);
+      transition: transform 0.2s ease-out, background-color 0.2s ease-in-out;
+    }
+
+    .orientation-dot.dot-warning {
+      background-color: #ef4444; /* red-500 */
+      animation: pulse-dot 1.5s infinite;
+    }
+
+    .orientation-dot.dot-avoiding {
+      background-color: #3b82f6; /* blue-500 */
+      animation: pulse-dot 1.5s infinite;
+    }
+    
+    .orientation-dot.dot-hovered {
+      transform: scale(1.8);
     }
   </style>
 <script type="importmap">

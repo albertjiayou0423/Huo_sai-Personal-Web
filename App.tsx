@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import BackgroundShapes from './components/BackgroundShapes';
 import Confetti from './components/Confetti';
@@ -20,6 +19,7 @@ interface EarthquakeInfo {
   depth?: string;
   originTime?: string;
   tsunamiInfo?: string;
+  eventId?: string;
 }
 
 // Define the structure for UI obstacles
@@ -81,6 +81,51 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
+  // NEW: State for earthquake toast notification
+  const [toastInfo, setToastInfo] = useState<{ id: string; message: string } | null>(null);
+  const lastEarthquakeIdRef = useRef<string | null>(null);
+
+  // Effect for polling earthquake data
+  useEffect(() => {
+    const fetchLatestEarthquake = async () => {
+      try {
+        const response = await fetch('https://dev.narikakun.net/webapi/earthquake/post_data.json');
+        if (!response.ok) return; // Fail silently
+        const data = await response.json();
+        const eventId = data.Head?.EventID;
+
+        // On first fetch, just set the ID without showing a toast
+        if (lastEarthquakeIdRef.current === null) {
+            lastEarthquakeIdRef.current = eventId;
+            return;
+        }
+
+        if (eventId && eventId !== lastEarthquakeIdRef.current) {
+          lastEarthquakeIdRef.current = eventId;
+          const message = `${data.Body?.Earthquake?.Hypocenter?.Name || 'N/A'} 最大震度: ${data.Body?.Intensity?.Observation?.MaxInt || 'N/A'}`;
+          setToastInfo({ id: eventId, message });
+        }
+      } catch (error) {
+        console.error("Error fetching earthquake data:", error); // Log silently
+      }
+    };
+    
+    fetchLatestEarthquake(); // Initial fetch
+    const intervalId = setInterval(fetchLatestEarthquake, 60000); // Poll every 60 seconds
+
+    return () => clearInterval(intervalId);
+  }, []);
+
+  // Effect for auto-dismissing the toast
+  useEffect(() => {
+    if (toastInfo) {
+      const timer = setTimeout(() => {
+        setToastInfo(null);
+      }, 6000); // Dismiss after 6 seconds
+      return () => clearTimeout(timer);
+    }
+  }, [toastInfo]);
+  
   // State for card interactions
   const [isGlitched, setIsGlitched] = useState(false);
   const [designColorIndex, setDesignColorIndex] = useState(0);
@@ -96,14 +141,13 @@ export default function App() {
 
   // State and logic for circle gesture
   const [generationTrigger, setGenerationTrigger] = useState(0);
-  const [progress, setProgress] = useState(0); // 0 to 1
-  const [showProgress, setShowProgress] = useState(false);
-  const [progressPos, setProgressPos] = useState({ x: 0, y: 0 });
+  const [vignetteProgress, setVignetteProgress] = useState(0); // 0 to 1
+  const [showVignette, setShowVignette] = useState(false);
   const gestureRef = useRef({
     points: [] as { x: number; y: number }[],
     totalAngle: 0,
     lastAngle: 0,
-    isActivated: false, // New state for activation
+    isActivated: false,
   });
   const progressTimeoutRef = useRef<number | null>(null);
 
@@ -112,76 +156,60 @@ export default function App() {
       const { clientX: x, clientY: y } = e;
       const g = gestureRef.current;
 
-      // --- Reset logic on timeout ---
       if (progressTimeoutRef.current) clearTimeout(progressTimeoutRef.current);
       progressTimeoutRef.current = window.setTimeout(() => {
-        setShowProgress(false);
+        setShowVignette(false);
         g.points = [];
         g.totalAngle = 0;
         g.isActivated = false;
-        setProgress(0);
-      }, 500); // Faster timeout
+        setVignetteProgress(0);
+      }, 500);
 
-      // --- Point sampling ---
       const lastPoint = g.points[g.points.length - 1];
-      if (lastPoint && Math.hypot(x - lastPoint.x, y - lastPoint.y) < 10) return; // Ignore small movements
+      if (lastPoint && Math.hypot(x - lastPoint.x, y - lastPoint.y) < 10) return;
       g.points.push({ x, y });
       if (g.points.length > 20) g.points.shift();
-      if (g.points.length < 5) return; // Need enough points for a stable center
+      if (g.points.length < 5) return;
 
-      // --- Gesture analysis ---
       const sample = g.points.slice(-10);
       const center = sample.reduce((acc, p) => ({ x: acc.x + p.x, y: acc.y + p.y }), { x: 0, y: 0 });
       center.x /= sample.length;
       center.y /= sample.length;
 
       const currentAngle = Math.atan2(y - center.y, x - center.x);
-      let angleDelta = 0;
-
       if (g.points.length > 5) {
         const delta = currentAngle - g.lastAngle;
         let wrappedDelta = delta;
         if (delta > Math.PI) wrappedDelta -= 2 * Math.PI;
         if (delta < -Math.PI) wrappedDelta += 2 * Math.PI;
-        angleDelta = wrappedDelta;
 
-        // Check for direction consistency
         if (Math.sign(g.totalAngle) !== 0 && Math.sign(wrappedDelta) !== Math.sign(g.totalAngle) && Math.abs(wrappedDelta) > 1.0) {
-          // Direction changed, reset progress
           g.totalAngle = 0;
           g.isActivated = false;
-          setShowProgress(false);
-          setProgress(0);
+          setShowVignette(false);
+          setVignetteProgress(0);
         } else {
           g.totalAngle += wrappedDelta;
         }
       }
       g.lastAngle = currentAngle;
-
       const circles = Math.abs(g.totalAngle) / (2 * Math.PI);
 
       if (!g.isActivated) {
-        // --- Activation Phase ---
-        if (circles >= 2) { // User must draw 2 circles to activate
+        if (circles >= 2) {
           g.isActivated = true;
-          g.totalAngle = 0; // Reset angle to start counting from this point
+          g.totalAngle = 0;
         }
       } else {
-        // --- Counting Phase ---
-        setProgressPos({ x, y });
-        setShowProgress(true);
-        
-        // The goal is 3 more circles after activation
-        setProgress(circles / 3);
-
+        setShowVignette(true);
+        setVignetteProgress(circles / 3);
         if (circles >= 3) {
           setGenerationTrigger(prev => prev + 1);
-          // Full reset after success
           g.totalAngle = 0;
           g.points = [];
           g.isActivated = false;
-          setProgress(0);
-          setShowProgress(false);
+          setVignetteProgress(0);
+          setShowVignette(false);
           if (progressTimeoutRef.current) clearTimeout(progressTimeoutRef.current);
         }
       }
@@ -207,9 +235,7 @@ export default function App() {
 
     const observer = new ResizeObserver(measureElements);
     observer.observe(mainElement);
-    
     const timeoutId = setTimeout(measureElements, 100);
-
     return () => {
       clearTimeout(timeoutId);
       observer.disconnect();
@@ -246,21 +272,13 @@ export default function App() {
   }, []);
 
   const handleConfettiClick = () => {
-    if (isCooldown) {
-      return;
-    }
-
+    if (isCooldown) return;
     setShowConfetti(true);
     setIsCooldown(true);
-
-    setTimeout(() => {
-      setIsCooldown(false);
-    }, 30000);
+    setTimeout(() => { setIsCooldown(false); }, 30000);
   };
   
-  const onAnimationEnd = useCallback(() => {
-    setShowConfetti(false);
-  }, []);
+  const onAnimationEnd = useCallback(() => { setShowConfetti(false); }, []);
 
   const handleEewCardClick = async () => {
     setIsModalOpen(true);
@@ -270,9 +288,7 @@ export default function App() {
     
     try {
       const response = await fetch('https://dev.narikakun.net/webapi/earthquake/post_data.json');
-      if (!response.ok) {
-        throw new Error('网络响应错误，请稍后重试。');
-      }
+      if (!response.ok) throw new Error('网络响应错误，请稍后重试。');
       const data = await response.json();
       
       const parsedData: EarthquakeInfo = {
@@ -282,10 +298,9 @@ export default function App() {
         depth: data.Body?.Earthquake?.Hypocenter?.Depth ? `${data.Body.Earthquake.Hypocenter.Depth}km` : 'N/A',
         originTime: data.Body?.Earthquake?.OriginTime || 'N/A',
         tsunamiInfo: data.Body?.Comments?.Observation || '无',
+        eventId: data.Head?.EventID || 'N/A',
       };
-      
       setEarthquakeData(parsedData);
-
     } catch (err) {
       setError(err instanceof Error ? err.message : '发生未知错误');
     } finally {
@@ -311,34 +326,19 @@ export default function App() {
     const sections = [homeRef.current, aboutRef.current, contactRef.current];
     const observer = new IntersectionObserver(
       (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            setActiveSection(entry.target.id ?? 'home');
-          }
-        });
+        entries.forEach((entry) => { if (entry.isIntersecting) { setActiveSection(entry.target.id ?? 'home'); } });
       },
-      {
-        root: scrollContainerRef.current,
-        threshold: 0.5,
-      }
+      { root: scrollContainerRef.current, threshold: 0.5, }
     );
-
-    sections.forEach((section) => {
-      if (section) observer.observe(section);
-    });
-
-    return () => {
-      sections.forEach((section) => {
-        if (section) observer.unobserve(section);
-      });
-    };
+    sections.forEach((section) => { if (section) observer.observe(section); });
+    return () => { sections.forEach((section) => { if (section) observer.unobserve(section); }); };
   }, []);
 
   const age = calculateAge(new Date('2013-01-01'));
 
   return (
     <main ref={mainRef} className={`relative h-screen text-slate-800 antialiased overflow-hidden transition-colors duration-700 ease-in-out ${sectionBackgrounds[activeSection]}`}>
-       <div
+      <div
         ref={cursorOuterRef}
         className="fixed pointer-events-none z-50"
         style={{ top: -100, left: -100 }}
@@ -354,26 +354,44 @@ export default function App() {
       </div>
 
       <div
-        className={`circle-progress-container ${showProgress ? 'visible' : ''}`}
-        style={{ top: `${progressPos.y}px`, left: `${progressPos.x}px` }}
-      >
-        <div
-          className="circle-progress-bar"
-          style={{ '--progress': `${progress * 360}deg` } as React.CSSProperties}
-        />
-      </div>
+        className={`vignette-progress ${showVignette ? 'visible' : ''}`}
+        style={{ '--vignette-size': `${400 - vignetteProgress * 300}px` } as React.CSSProperties}
+      />
       
       {showConfetti && <Confetti onAnimationEnd={onAnimationEnd} />}
       
       <BackgroundShapes obstacles={obstacles} onUiCollision={handleUiCollision} generationTrigger={generationTrigger} />
       
       {Object.entries(uiIndicators).map(([id, indicator]) => (
-          <div
-              key={id}
-              className="ui-indicator-segment"
-              style={indicator.style}
-          />
+          <div key={id} className="ui-indicator-segment" style={indicator.style} />
       ))}
+      
+      {toastInfo && (
+        <div className="fixed top-5 right-5 z-50 w-full max-w-sm bg-white/80 backdrop-blur-md rounded-lg shadow-lg pointer-events-auto ring-1 ring-black ring-opacity-5 overflow-hidden animate-toast-in-right">
+          <div className="p-4">
+            <div className="flex items-start">
+              <div className="flex-shrink-0 pt-0.5">
+                <EarthquakeIcon className="h-6 w-6 text-blue-600" />
+              </div>
+              <div className="ml-3 w-0 flex-1">
+                <p className="text-sm font-semibold text-gray-900">新地震情报</p>
+                <p className="mt-1 text-sm text-gray-600">{toastInfo.message}</p>
+              </div>
+              <div className="ml-4 flex-shrink-0 flex">
+                <button
+                  onClick={() => setToastInfo(null)}
+                  className="inline-flex text-gray-400 rounded-md hover:text-gray-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                >
+                  <span className="sr-only">Close</span>
+                  <svg className="h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                    <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       <button
         onClick={handleConfettiClick}
@@ -396,8 +414,6 @@ export default function App() {
       </button>
 
       <div ref={scrollContainerRef} className="relative z-10 h-screen w-full snap-y snap-mandatory overflow-y-scroll">
-
-        {/* Hero Section */}
         <section ref={homeRef} id="home" className="relative h-screen w-full snap-start flex flex-col items-center justify-center text-center p-4 sm:p-8">
           <div className="absolute top-8 left-1/2 -translate-x-1/2 w-full max-w-md px-4" data-obstacle="true" data-id="countdown">
              <ProgrammerDayCountdown />
@@ -426,7 +442,6 @@ export default function App() {
           </div>
         </section>
 
-        {/* About Section */}
         <section ref={aboutRef} id="about" className="h-screen w-full snap-start flex flex-col items-center justify-center p-4 sm:p-8">
           <div className="relative w-full max-w-4xl text-center">
             <h2 className="text-4xl sm:text-5xl font-bold tracking-tight mb-12" data-obstacle="true" data-id="about-title">关于我</h2>
@@ -477,7 +492,6 @@ export default function App() {
           </div>
         </section>
         
-        {/* Contact Section */}
         <section ref={contactRef} id="contact" className="h-screen w-full snap-start flex flex-col items-center justify-center p-4 sm:p-8">
            <div className="relative w-full max-w-4xl text-center">
             <h2 className="text-4xl sm:text-5xl font-bold tracking-tight mb-10" data-obstacle="true" data-id="contact-title">联系我</h2>
@@ -506,11 +520,9 @@ export default function App() {
         </section>
       </div>
       
-      {/* Earthquake Info Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 z-40 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/40 animate-fadeIn" onClick={() => setIsModalOpen(false)}></div>
-          
           <div className="relative w-full max-w-2xl bg-white p-6 sm:p-8 rounded-lg border border-gray-200/50 shadow-lg text-left animate-scaleUp">
              <button
               onClick={() => setIsModalOpen(false)}
