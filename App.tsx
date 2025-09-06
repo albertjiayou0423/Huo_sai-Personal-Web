@@ -205,7 +205,6 @@ export default function App() {
   const [hasScrolled, setHasScrolled] = useState(false);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   
-  const [isScrolling, setIsScrolling] = useState(false);
   const homeRef = useRef<HTMLElement>(null);
   const aboutRef = useRef<HTMLElement>(null);
   const timelineRef = useRef<HTMLElement>(null);
@@ -218,62 +217,69 @@ export default function App() {
   }), []);
   const sectionOrder = useMemo(() => ['home', 'about', 'timeline', 'contact'], []);
 
-  // FIX: Moved the activeSection state declaration here to resolve the "used before declaration" error.
   const [activeSection, setActiveSection] = useState('home');
+  const activeSectionRef = useRef('home');
+  const isScrollingRef = useRef(false);
+  const scrollTimeoutRef = useRef<number | null>(null);
 
   useEffect(() => {
-      const container = scrollContainerRef.current;
-      if (!container) return;
+    const container = scrollContainerRef.current;
+    if (!container) return;
 
-      let scrollTimeout: number;
-
-      const handleWheel = (e: WheelEvent) => {
-          e.preventDefault();
-          
-          if (isScrolling) {
-              return;
-          }
-
-          const currentSectionIndex = sectionOrder.indexOf(activeSection);
-          let nextSectionIndex = -1;
-
-          if (e.deltaY > 20) { // Scrolling down
-              if (currentSectionIndex < sectionOrder.length - 1) {
-                  nextSectionIndex = currentSectionIndex + 1;
-              }
-          } else if (e.deltaY < -20) { // Scrolling up
-              if (currentSectionIndex > 0) {
-                  nextSectionIndex = currentSectionIndex - 1;
-              }
-          }
-
-          if (nextSectionIndex !== -1) {
-              const nextSectionKey = sectionOrder[nextSectionIndex] as keyof typeof sectionRefs;
-              const nextSectionRef = sectionRefs[nextSectionKey];
-
-              if (nextSectionRef.current) {
-                  setIsScrolling(true);
-                  container.scrollTo({
-                      top: nextSectionRef.current.offsetTop,
-                      behavior: 'smooth'
-                  });
-
-                  scrollTimeout = window.setTimeout(() => {
-                      setIsScrolling(false);
-                  }, 1000); 
-              }
-          }
-      };
-      
-      window.addEventListener('wheel', handleWheel, { passive: false });
-
-      return () => {
-        window.removeEventListener('wheel', handleWheel);
-        if (scrollTimeout) {
-          clearTimeout(scrollTimeout);
+    const handleWheel = (e: WheelEvent) => {
+        e.preventDefault();
+        
+        if (isScrollingRef.current) {
+            return;
         }
-      };
-  }, [activeSection, isScrolling, sectionOrder, sectionRefs]);
+
+        const currentSectionIndex = sectionOrder.indexOf(activeSectionRef.current);
+        let nextSectionIndex = -1;
+
+        if (e.deltaY > 20) { // Scrolling down
+            if (currentSectionIndex < sectionOrder.length - 1) {
+                nextSectionIndex = currentSectionIndex + 1;
+            }
+        } else if (e.deltaY < -20) { // Scrolling up
+            if (currentSectionIndex > 0) {
+                nextSectionIndex = currentSectionIndex - 1;
+            }
+        }
+
+        if (nextSectionIndex !== -1) {
+            isScrollingRef.current = true;
+            const nextSectionKey = sectionOrder[nextSectionIndex] as keyof typeof sectionRefs;
+            const nextSectionRef = sectionRefs[nextSectionKey];
+
+            if (nextSectionRef.current) {
+                container.scrollTo({
+                    top: nextSectionRef.current.offsetTop,
+                    behavior: 'smooth'
+                });
+            }
+        }
+    };
+
+    const handleScrollEnd = () => {
+        if (scrollTimeoutRef.current) {
+            clearTimeout(scrollTimeoutRef.current);
+        }
+        scrollTimeoutRef.current = window.setTimeout(() => {
+            isScrollingRef.current = false;
+        }, 150);
+    };
+    
+    window.addEventListener('wheel', handleWheel, { passive: false });
+    container.addEventListener('scroll', handleScrollEnd);
+
+    return () => {
+      window.removeEventListener('wheel', handleWheel);
+      container.removeEventListener('scroll', handleScrollEnd);
+      if (scrollTimeoutRef.current) {
+        clearTimeout(scrollTimeoutRef.current);
+      }
+    };
+  }, [sectionOrder, sectionRefs]);
   
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [earthquakeData, setEarthquakeData] = useState<EarthquakeInfo | null>(null);
@@ -514,7 +520,13 @@ export default function App() {
     const sections = [homeRef.current, aboutRef.current, timelineRef.current, contactRef.current];
     const observer = new IntersectionObserver(
       (entries) => {
-        entries.forEach((entry) => { if (entry.isIntersecting) { setActiveSection(entry.target.id ?? 'home'); } });
+        entries.forEach((entry) => {
+            if (entry.isIntersecting) { 
+                const newActiveSection = entry.target.id ?? 'home';
+                setActiveSection(newActiveSection);
+                activeSectionRef.current = newActiveSection;
+            } 
+        });
       },
       { root: scrollContainerRef.current, threshold: 0.5, }
     );
