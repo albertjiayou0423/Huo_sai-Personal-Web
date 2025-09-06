@@ -323,10 +323,15 @@
     .constellation-line {
       stroke: rgb(var(--text-quaternary) / 0.2);
       stroke-width: 1px;
-      transition: opacity 0.3s ease-in-out;
+      transition: opacity 0.8s ease-in-out, stroke 0.8s ease-in-out;
       pointer-events: none;
     }
     
+    .constellation-line.idle {
+      stroke: rgb(var(--text-quaternary) / 0.5);
+      stroke-width: 1.5px;
+    }
+
     @keyframes slide-up-fade-in {
         from {
             opacity: 0;
@@ -341,6 +346,31 @@
         animation: slide-up-fade-in 0.5s ease-out forwards;
     }
 
+    /* --- NEW: EEW Ripple Effect --- */
+    @keyframes eew-ripple-effect {
+      from {
+        transform: translate(-50%, -50%) scale(0);
+        opacity: 0.8;
+      }
+      to {
+        transform: translate(-50%, -50%) scale(25);
+        opacity: 0;
+      }
+    }
+
+    .eew-ripple-effect {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      width: 2px;
+      height: 2px;
+      border-radius: 50%;
+      background: transparent;
+      box-shadow: 0 0 120px 80px rgba(239, 68, 68, 0.6); /* red-500 */
+      animation: eew-ripple-effect 1.5s ease-out forwards;
+      z-index: 100;
+      pointer-events: none;
+    }
   </style>
 <script type="importmap">
 {

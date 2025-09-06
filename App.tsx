@@ -4,9 +4,8 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import BackgroundShapes from './components/BackgroundShapes';
 import Confetti from './components/Confetti';
 import ProgrammerDayCountdown from './components/ProgrammerDayCountdown';
-import { CodeIcon, DesignIcon, GithubIcon, MailIcon, ZapIcon, EarthquakeIcon, PartyPopperIcon, ClockIcon, PaletteIcon, HelpIcon, SparklesIcon, CircleArrowIcon, MoveIcon, MouseClickIcon, MagnetIcon, SoundIcon, MuteIcon } from './components/Icons';
+import { CodeIcon, DesignIcon, GithubIcon, MailIcon, ZapIcon, EarthquakeIcon, PartyPopperIcon, ClockIcon, PaletteIcon, HelpIcon, SparklesIcon, CircleArrowIcon, MoveIcon, MouseClickIcon, MagnetIcon } from './components/Icons';
 import { useDailyGreeting } from './hooks/useDailyGreeting';
-import { useSound } from './hooks/useSound';
 
 
 // Define background colors for each section using CSS variables
@@ -110,7 +109,6 @@ export default function App() {
 
   // --- NEW: Feature hooks ---
   const dailyGreeting = useDailyGreeting();
-  const { isMuted, toggleMute, playSound, stopSound } = useSound();
   
   const setCustomPalette = useCallback((color: string) => {
     const root = document.documentElement;
@@ -177,11 +175,14 @@ export default function App() {
   ];
   
   const handleSaveCustomColor = () => {
-    playSound('click');
     localStorage.setItem('hs-custom-color', tempCustomColor);
     setPalette('custom');
     setIsCustomColorModalOpen(false);
   };
+
+  // --- NEW: Idle Detection ---
+  const [isIdle, setIsIdle] = useState(false);
+  const idleTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
@@ -190,7 +191,19 @@ export default function App() {
         cursorOuterRef.current.style.top = `${e.clientY}px`;
       }
       setMouseState(prev => ({ ...prev, x: e.clientX, y: e.clientY }));
+
+      // --- NEW: Reset idle timer on mouse move ---
+      if (idleTimerRef.current) {
+          clearTimeout(idleTimerRef.current);
+      }
+      if (isIdle) {
+          setIsIdle(false);
+      }
+      idleTimerRef.current = window.setTimeout(() => {
+          setIsIdle(true);
+      }, 3000); // 3 seconds of inactivity
     };
+
     const handleMouseDown = (e: MouseEvent) => {
       if (e.button === 0) setMouseState(prev => ({ ...prev, isLeftDown: true }));
       if (e.button === 2) setMouseState(prev => ({ ...prev, isRightDown: true }));
@@ -244,17 +257,9 @@ export default function App() {
         window.removeEventListener('keyup', handleKeyUp);
         window.removeEventListener('blur', handleBlur);
         container?.removeEventListener('scroll', handleScroll);
+        if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
     };
-  }, []);
-
-  // --- Sound effect for force field ---
-  useEffect(() => {
-    if (mouseState.isLeftDown) {
-      playSound('hum', { loop: true });
-    } else {
-      stopSound('hum');
-    }
-  }, [mouseState.isLeftDown, playSound, stopSound]);
+  }, [isIdle]);
 
   const [hasScrolled, setHasScrolled] = useState(false);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -342,6 +347,7 @@ export default function App() {
   
   const [toastInfo, setToastInfo] = useState<{ id: string; message: string; source: string; } | null>(null);
   const lastEventIdRef = useRef<Record<string, string | null>>({});
+  const [eewRippleKey, setEewRippleKey] = useState(0);
 
   // --- REWORKED & FIXED: Unified EEW Parser (more robust) ---
   const parseEewData = useCallback((data: any): EarthquakeInfo | null => {
@@ -431,6 +437,9 @@ export default function App() {
                             const message = `${parsedData.hypocenter || 'N/A'} M${parsedData.magnitude || '?'} 最大烈度: ${parsedData.maxInt || 'N/A'}`;
                             setToastInfo({ id: parsedData.eventId, message, source: parsedData.source });
                             
+                             // --- NEW: Trigger ripple effect ---
+                            setEewRippleKey(prev => prev + 1);
+                            
                             setEarthquakeData(parsedData);
                             setIsModalOpen(true);
                             setIsLoading(false);
@@ -478,6 +487,7 @@ export default function App() {
   
   const [shapeCount, setShapeCount] = useState(0);
   const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
+  const [hoveredTimelineColor, setHoveredTimelineColor] = useState<string | null>(null);
 
   useEffect(() => {
     const handleGesture = (e: MouseEvent) => {
@@ -602,7 +612,6 @@ export default function App() {
 
   const handleConfettiClick = () => {
     if (isCooldown) return;
-    playSound('click');
     setShowConfetti(true);
     setIsCooldown(true);
     setTimeout(() => { setIsCooldown(false); }, 30000);
@@ -612,7 +621,6 @@ export default function App() {
 
   // --- Multi-source EEW fetch handler ---
   const handleEewSourceClick = async (source: 'jma' | 'sc' | 'cenc' | 'fj') => {
-    playSound('click');
     setIsModalOpen(true);
     setIsLoading(true);
     setError(null);
@@ -641,13 +649,11 @@ export default function App() {
 
 
   const handleCodeCardClick = () => {
-    playSound('click');
     setIsGlitched(true);
     setTimeout(() => setIsGlitched(false), 300);
   };
 
   const handleDesignCardClick = () => {
-    playSound('click');
     setDesignColorIndex((prevIndex) => (prevIndex + 1) % designColors.length);
   };
 
@@ -722,13 +728,14 @@ export default function App() {
     }
   ];
   
+  // --- NEW: Added hex colors for timeline interaction ---
   const timelineData = [
-      { year: '2022', text: '开始学习编程 (Scratch)', color: 'bg-orange-400' },
-      { year: '2023', text: '学习 Python', color: 'bg-sky-400' },
-      { year: '2024-2025', text: '专心学习 C++', color: 'bg-blue-500' },
-      { year: '未来', text: '深入学习算法与数据结构', color: 'bg-indigo-500' },
-      { year: '未来', text: '为开源项目做出贡献', color: 'bg-emerald-500' },
-      { year: '目标', text: '成为一名创造有趣、有用东西的工程师', color: 'bg-rose-500' },
+      { year: '2022', text: '开始学习编程 (Scratch)', color: 'bg-orange-400', hex: '#fb923c' },
+      { year: '2023', text: '学习 Python', color: 'bg-sky-400', hex: '#38bdf8' },
+      { year: '2024-2025', text: '专心学习 C++', color: 'bg-blue-500', hex: '#3b82f6' },
+      { year: '未来', text: '深入学习算法与数据结构', color: 'bg-indigo-500', hex: '#6366f1' },
+      { year: '未来', text: '为开源项目做出贡献', color: 'bg-emerald-500', hex: '#10b981' },
+      { year: '目标', text: '成为一名创造有趣、有用东西的工程师', color: 'bg-rose-500', hex: '#f43f5e' },
   ];
 
   return (
@@ -740,6 +747,9 @@ export default function App() {
         className="fixed inset-0 z-0 transition-colors duration-700 ease-in-out"
         style={{ backgroundColor: `rgb(${sectionBgVars[activeSection]})` }}
       />
+
+      {/* --- NEW: EEW Ripple Effect --- */}
+      {eewRippleKey > 0 && <div key={eewRippleKey} className="eew-ripple-effect"></div>}
 
       <div
         className="fixed pointer-events-none z-40 rounded-full border-2 border-dashed transition-all duration-300 ease-out"
@@ -788,7 +798,9 @@ export default function App() {
         generationTrigger={generationTrigger}
         mouseState={mouseState}
         onShapeCountChange={setShapeCount}
-        playSound={playSound}
+        isIdle={isIdle}
+        hoveredTimelineColor={hoveredTimelineColor}
+        activeSection={activeSection}
       />
       
       {Object.entries(uiIndicators).map(([id, indicator]) => (
@@ -808,7 +820,7 @@ export default function App() {
               </div>
               <div className="ml-4 flex-shrink-0 flex">
                 <button
-                  onClick={() => { setToastInfo(null); playSound('click'); }}
+                  onClick={() => { setToastInfo(null); }}
                   className="inline-flex text-[rgb(var(--text-quaternary))] rounded-md hover:text-[rgb(var(--text-tertiary))] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
                 >
                   <span className="sr-only">Close</span>
@@ -829,8 +841,8 @@ export default function App() {
           isCooldown ? 'opacity-50' : 'hover:scale-110'
         }`}
         aria-label="撒花"
-        onMouseDown={() => !isCooldown && playSound('click')}
-        onMouseEnter={() => !isCooldown && setIsHoveringLink(true)}
+        onMouseDown={() => !isCooldown}
+        onMouseEnter={() => { if (!isCooldown) { setIsHoveringLink(true); } }}
         onMouseLeave={() => setIsHoveringLink(false)}
         data-obstacle="true" data-id="confetti-button"
       >
@@ -842,10 +854,10 @@ export default function App() {
       </button>
 
       <button
-        onClick={() => { setIsHelpModalOpen(true); playSound('click'); }}
+        onClick={() => { setIsHelpModalOpen(true); }}
         className="fixed bottom-4 left-20 z-40 p-3 bg-[rgb(var(--background-button))] rounded-full shadow-lg backdrop-blur-sm transition-all duration-200 hover:scale-110 pointer-events-auto"
         aria-label="帮助"
-        onMouseEnter={() => setIsHoveringLink(true)}
+        onMouseEnter={() => { setIsHoveringLink(true); }}
         onMouseLeave={() => setIsHoveringLink(false)}
         data-obstacle="true" data-id="help-button"
       >
@@ -853,25 +865,10 @@ export default function App() {
       </button>
 
       <button
-        onClick={() => { toggleMute(); playSound('click'); }}
-        className="fixed bottom-4 left-36 z-40 p-3 bg-[rgb(var(--background-button))] rounded-full shadow-lg backdrop-blur-sm transition-all duration-200 hover:scale-110 pointer-events-auto"
-        aria-label={isMuted ? "取消静音" : "静音"}
-        onMouseEnter={() => setIsHoveringLink(true)}
-        onMouseLeave={() => setIsHoveringLink(false)}
-        data-obstacle="true" data-id="mute-button"
-      >
-        {isMuted ? (
-            <MuteIcon className="w-6 h-6 text-[rgb(var(--text-secondary))]" />
-        ) : (
-            <SoundIcon className="w-6 h-6 text-[rgb(var(--text-secondary))]" />
-        )}
-      </button>
-
-      <button
           className="fixed top-4 right-4 z-40 p-3 bg-[rgb(var(--background-button))] rounded-full shadow-lg backdrop-blur-sm transition-all duration-200 hover:scale-110 pointer-events-auto"
           aria-label="Toggle Theme"
-          onClick={() => { setIsPaletteModalOpen(true); playSound('click'); }}
-          onMouseEnter={() => setIsHoveringLink(true)}
+          onClick={() => { setIsPaletteModalOpen(true); }}
+          onMouseEnter={() => { setIsHoveringLink(true); }}
           onMouseLeave={() => setIsHoveringLink(false)}
           data-obstacle="true" data-id="theme-button"
         >
@@ -880,7 +877,7 @@ export default function App() {
 
       {isPaletteModalOpen && (
         <div className="fixed inset-0 z-40 flex items-center justify-center p-4 pointer-events-auto">
-          <div className="absolute inset-0 bg-black/40 animate-fadeIn" onClick={() => { setIsPaletteModalOpen(false); playSound('click'); }}></div>
+          <div className="absolute inset-0 bg-black/40 animate-fadeIn" onClick={() => { setIsPaletteModalOpen(false); }}></div>
           <div className="relative flex flex-col items-center gap-4 bg-[rgb(var(--background-card))] p-6 sm:p-8 rounded-lg border border-[rgb(var(--border-primary))] shadow-lg text-left animate-scaleUp">
               <h3 className="text-lg font-semibold text-[rgb(var(--text-secondary))]">选择背景</h3>
               <div className="grid grid-cols-4 sm:grid-cols-4 gap-4">
@@ -890,9 +887,8 @@ export default function App() {
                           onClick={() => {
                               setPalette(p.id);
                               setIsPaletteModalOpen(false);
-                              playSound('click');
                           }}
-                          onMouseEnter={() => setIsHoveringLink(true)}
+                          onMouseEnter={() => { setIsHoveringLink(true); }}
                           onMouseLeave={() => setIsHoveringLink(false)}
                           className={`flex flex-col items-center gap-2 p-2 rounded-md transition-all ${palette === p.id ? 'ring-2 ring-blue-500' : 'hover:bg-slate-500/10'}`}
                       >
@@ -904,9 +900,8 @@ export default function App() {
                       onClick={() => {
                         setIsPaletteModalOpen(false);
                         setIsCustomColorModalOpen(true);
-                        playSound('click');
                       }}
-                      onMouseEnter={() => setIsHoveringLink(true)}
+                      onMouseEnter={() => { setIsHoveringLink(true); }}
                       onMouseLeave={() => setIsHoveringLink(false)}
                       className={`flex flex-col items-center gap-2 p-2 rounded-md transition-all ${palette === 'custom' ? 'ring-2 ring-blue-500' : 'hover:bg-slate-500/10'}`}
                   >
@@ -937,7 +932,7 @@ export default function App() {
               </div>
               <button
                 onClick={handleSaveCustomColor}
-                onMouseEnter={() => setIsHoveringLink(true)}
+                onMouseEnter={() => { setIsHoveringLink(true); }}
                 onMouseLeave={() => setIsHoveringLink(false)}
                 className="px-6 py-2 bg-blue-500 text-white font-semibold rounded-md hover:bg-blue-600 transition-colors"
               >
@@ -952,7 +947,7 @@ export default function App() {
             <div className="absolute inset-0 bg-black/40 animate-fadeIn" onClick={() => setIsHelpModalOpen(false)}></div>
             <div className="relative w-full max-w-4xl bg-[rgb(var(--background-card))] p-6 sm:p-8 rounded-lg border border-[rgb(var(--border-primary))] shadow-lg text-left animate-scaleUp">
                 <button
-                    onClick={() => { setIsHelpModalOpen(false); playSound('click'); }}
+                    onClick={() => { setIsHelpModalOpen(false); }}
                     className="absolute top-4 right-4 text-[rgb(var(--text-quaternary))] hover:text-[rgb(var(--text-tertiary))] transition-colors"
                     aria-label="关闭"
                 >
@@ -1022,7 +1017,7 @@ export default function App() {
                 className="bg-[rgb(var(--background-card))] p-6 rounded-lg border border-[rgb(var(--border-primary))] shadow-sm transition-transform hover:scale-105 duration-300 pointer-events-auto"
                 onClick={handleCodeCardClick} role="button" tabIndex={0}
                 onKeyDown={(e) => e.key === 'Enter' && handleCodeCardClick()}
-                onMouseEnter={() => setIsHoveringLink(true)} onMouseLeave={() => setIsHoveringLink(false)}
+                onMouseEnter={() => { setIsHoveringLink(true); }} onMouseLeave={() => setIsHoveringLink(false)}
               >
                 <div className="flex items-center gap-4">
                   <div className="bg-blue-100 p-3 rounded-full flex-shrink-0">
@@ -1042,17 +1037,17 @@ export default function App() {
                   <h3 className="text-xl font-semibold text-[rgb(var(--text-secondary))]">EEW</h3>
                 </div>
                  <div className="grid grid-cols-2 gap-2 text-center">
-                    <button onClick={() => handleEewSourceClick('jma')} onMouseEnter={() => setIsHoveringLink(true)} onMouseLeave={() => setIsHoveringLink(false)} className="text-sm bg-red-500/10 text-red-700 font-semibold py-2 px-2 rounded-md hover:bg-red-500/20 transition-colors">日本(JMA)</button>
-                    <button onClick={() => handleEewSourceClick('sc')} onMouseEnter={() => setIsHoveringLink(true)} onMouseLeave={() => setIsHoveringLink(false)} className="text-sm bg-blue-500/10 text-blue-700 font-semibold py-2 px-2 rounded-md hover:bg-blue-500/20 transition-colors">四川</button>
-                    <button onClick={() => handleEewSourceClick('cenc')} onMouseEnter={() => setIsHoveringLink(true)} onMouseLeave={() => setIsHoveringLink(false)} className="text-sm bg-green-500/10 text-green-700 font-semibold py-2 px-2 rounded-md hover:bg-green-500/20 transition-colors">中国(CENC)</button>
-                    <button onClick={() => handleEewSourceClick('fj')} onMouseEnter={() => setIsHoveringLink(true)} onMouseLeave={() => setIsHoveringLink(false)} className="text-sm bg-amber-500/10 text-amber-700 font-semibold py-2 px-2 rounded-md hover:bg-amber-500/20 transition-colors">福建</button>
+                    <button onClick={() => handleEewSourceClick('jma')} onMouseEnter={() => { setIsHoveringLink(true); }} onMouseLeave={() => setIsHoveringLink(false)} className="text-sm bg-red-500/10 text-red-700 font-semibold py-2 px-2 rounded-md hover:bg-red-500/20 transition-colors">日本(JMA)</button>
+                    <button onClick={() => handleEewSourceClick('sc')} onMouseEnter={() => { setIsHoveringLink(true); }} onMouseLeave={() => setIsHoveringLink(false)} className="text-sm bg-blue-500/10 text-blue-700 font-semibold py-2 px-2 rounded-md hover:bg-blue-500/20 transition-colors">四川</button>
+                    <button onClick={() => handleEewSourceClick('cenc')} onMouseEnter={() => { setIsHoveringLink(true); }} onMouseLeave={() => setIsHoveringLink(false)} className="text-sm bg-green-500/10 text-green-700 font-semibold py-2 px-2 rounded-md hover:bg-green-500/20 transition-colors">中国(CENC)</button>
+                    <button onClick={() => handleEewSourceClick('fj')} onMouseEnter={() => { setIsHoveringLink(true); }} onMouseLeave={() => setIsHoveringLink(false)} className="text-sm bg-amber-500/10 text-amber-700 font-semibold py-2 px-2 rounded-md hover:bg-amber-500/20 transition-colors">福建</button>
                  </div>
               </div>
               <div
                 className="bg-[rgb(var(--background-card))] p-6 rounded-lg border border-[rgb(var(--border-primary))] shadow-sm transition-transform hover:scale-105 duration-300 pointer-events-auto"
                 onClick={handleDesignCardClick} role="button" tabIndex={0}
                 onKeyDown={(e) => e.key === 'Enter' && handleDesignCardClick()}
-                onMouseEnter={() => setIsHoveringLink(true)} onMouseLeave={() => setIsHoveringLink(false)}
+                onMouseEnter={() => { setIsHoveringLink(true); }} onMouseLeave={() => setIsHoveringLink(false)}
               >
                 <div className="flex items-center gap-4">
                   <div className={`p-3 rounded-full flex-shrink-0 transition-colors duration-300 ${designColors[designColorIndex].bg}`}>
@@ -1074,7 +1069,12 @@ export default function App() {
             <div className="relative w-full max-w-3xl mx-auto pointer-events-auto" data-obstacle="true" data-id="timeline-cards">
               <div className="absolute left-4 md:left-1/2 top-2 h-full w-0.5 bg-slate-300 -translate-x-1/2" />
               {timelineData.map((item, index) => (
-                <div key={index} className={`relative flex items-center mb-12 ${index % 2 === 0 ? 'md:flex-row-reverse' : 'md:flex-row'}`}>
+                <div 
+                  key={index} 
+                  className={`relative flex items-center mb-12 ${index % 2 === 0 ? 'md:flex-row-reverse' : 'md:flex-row'}`}
+                  onMouseEnter={() => setHoveredTimelineColor(item.hex)}
+                  onMouseLeave={() => setHoveredTimelineColor(null)}
+                >
                   <div className={`w-full md:w-5/12 ${index % 2 === 0 ? 'md:text-right' : 'md:text-left'}`}>
                     <div className="bg-[rgb(var(--background-card))] p-5 rounded-lg border border-[rgb(var(--border-primary))] shadow-sm ml-12 md:ml-0">
                       <h3 className="font-bold text-lg text-[rgb(var(--text-secondary))]">{item.year}</h3>
@@ -1094,14 +1094,14 @@ export default function App() {
           <div className="relative w-full max-w-4xl text-center pointer-events-auto z-30">
             <h2 className="text-4xl sm:text-5xl font-bold tracking-tight mb-8 text-[rgb(var(--text-secondary))]" data-obstacle="true" data-id="contact-title">联系我</h2>
             <div className="flex justify-center items-center gap-8 pointer-events-auto" data-obstacle="true" data-id="contact-links">
-              <a href="mailto:albert.tang_1a@hotmail.com" className="group" onMouseEnter={() => setIsHoveringLink(true)} onMouseLeave={() => setIsHoveringLink(false)}>
+              <a href="mailto:albert.tang_1a@hotmail.com" className="group" onMouseEnter={() => { setIsHoveringLink(true); }} onMouseLeave={() => setIsHoveringLink(false)}>
                 <div className="flex flex-col items-center gap-2">
                   <MailIcon className="w-10 h-10 text-[rgb(var(--text-quaternary))] group-hover:text-[rgb(var(--text-link-hover))] transition-colors" />
                   <span className="text-[rgb(var(--text-tertiary))] group-hover:text-[rgb(var(--text-link-hover))] transition-colors">邮箱</span>
                   <p className="text-sm text-[rgb(var(--text-quaternary))] mt-1">albert.tang_1a@hotmail.com</p>
                 </div>
               </a>
-              <a href="https://github.com/albertjiayou0423" target="_blank" rel="noopener noreferrer" className="group" onMouseEnter={() => setIsHoveringLink(true)} onMouseLeave={() => setIsHoveringLink(false)}>
+              <a href="https://github.com/albertjiayou0423" target="_blank" rel="noopener noreferrer" className="group" onMouseEnter={() => { setIsHoveringLink(true); }} onMouseLeave={() => setIsHoveringLink(false)}>
                  <div className="flex flex-col items-center gap-2">
                   <GithubIcon className="w-10 h-10 text-[rgb(var(--text-quaternary))] group-hover:text-[rgb(var(--text-link-gh-hover))] transition-colors" />
                   <span className="text-[rgb(var(--text-tertiary))] group-hover:text-[rgb(var(--text-link-gh-hover))] transition-colors">GitHub</span>
@@ -1114,7 +1114,7 @@ export default function App() {
 
         {isModalOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-auto">
-            <div className="absolute inset-0 bg-black/50 animate-fadeIn" onClick={() => { setIsModalOpen(false); playSound('click'); }}></div>
+            <div className="absolute inset-0 bg-black/50 animate-fadeIn" onClick={() => { setIsModalOpen(false); }}></div>
             <div className="relative bg-[rgb(var(--background-card))] rounded-lg shadow-xl w-full max-w-md text-left overflow-hidden animate-scaleUp">
                 <div className="bg-blue-500 text-white p-4 flex justify-between items-center">
                     <div className="flex items-center gap-3">
@@ -1155,8 +1155,8 @@ export default function App() {
                     <button
                         type="button"
                         className="inline-flex justify-center rounded-md border border-transparent bg-blue-100 px-4 py-2 text-sm font-medium text-blue-900 hover:bg-blue-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
-                        onClick={() => { setIsModalOpen(false); playSound('click'); }}
-                        onMouseEnter={() => setIsHoveringLink(true)} onMouseLeave={() => setIsHoveringLink(false)}
+                        onClick={() => { setIsModalOpen(false); }}
+                        onMouseEnter={() => { setIsHoveringLink(true); }} onMouseLeave={() => setIsHoveringLink(false)}
                     >
                         关闭
                     </button>
