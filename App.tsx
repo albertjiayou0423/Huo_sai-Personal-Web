@@ -6,9 +6,9 @@ import { CodeIcon, DesignIcon, GithubIcon, MailIcon, ZapIcon, EarthquakeIcon, Pa
 
 // Define background colors for each section in a map for easy access
 const sectionBackgrounds: { [key: string]: string } = {
-  home: 'bg-stone-100',
-  about: 'bg-green-50',
-  contact: 'bg-orange-50',
+  home: 'bg-slate-100',
+  about: 'bg-teal-50',
+  contact: 'bg-rose-50',
 };
 
 // Define the structure of the earthquake data we'll display
@@ -28,6 +28,14 @@ interface Obstacle {
   rect: DOMRect;
 }
 
+// NEW: Define structure for mouse state
+interface MouseState {
+  x: number;
+  y: number;
+  isLeftDown: boolean;
+  isRightDown: boolean;
+}
+
 const calculateAge = (birthDate: Date): number => {
   const today = new Date();
   let age = today.getFullYear() - birthDate.getFullYear();
@@ -39,15 +47,21 @@ const calculateAge = (birthDate: Date): number => {
 };
 
 const designColors = [
-    { bg: 'bg-green-100', text: 'text-green-600' },
-    { bg: 'bg-purple-100', text: 'text-purple-600' },
-    { bg: 'bg-pink-100', text: 'text-pink-600' },
+    { bg: 'bg-blue-100', text: 'text-blue-600' },    // Slate Blue family
+    { bg: 'bg-rose-100', text: 'text-rose-600' },    // Dusty Rose family
+    { bg: 'bg-teal-100', text: 'text-teal-600' },    // Sage Green family
 ];
 
 export default function App() {
   // State and logic for custom mouse cursor
   const cursorOuterRef = useRef<HTMLDivElement>(null);
   const [isHoveringLink, setIsHoveringLink] = useState(false);
+  
+  // NEW: State for mouse position, clicks, and scroll
+  const [mouseState, setMouseState] = useState<MouseState>({ x: window.innerWidth / 2, y: window.innerHeight / 2, isLeftDown: false, isRightDown: false });
+  const [scrollVelocity, setScrollVelocity] = useState(0);
+  const scrollTimeoutRef = useRef<number | null>(null);
+  const lastScrollTop = useRef(0);
 
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
@@ -55,25 +69,51 @@ export default function App() {
         cursorOuterRef.current.style.left = `${e.clientX}px`;
         cursorOuterRef.current.style.top = `${e.clientY}px`;
       }
+      setMouseState(prev => ({ ...prev, x: e.clientX, y: e.clientY }));
     };
+    const handleMouseDown = (e: MouseEvent) => {
+      if (e.button === 0) setMouseState(prev => ({ ...prev, isLeftDown: true }));
+      if (e.button === 2) setMouseState(prev => ({ ...prev, isRightDown: true }));
+    };
+    const handleMouseUp = (e: MouseEvent) => {
+      if (e.button === 0) setMouseState(prev => ({ ...prev, isLeftDown: false }));
+      if (e.button === 2) setMouseState(prev => ({ ...prev, isRightDown: false }));
+    };
+    const handleContextMenu = (e: MouseEvent) => e.preventDefault();
+    
     window.addEventListener('mousemove', handleMouseMove);
-    return () => window.removeEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mousedown', handleMouseDown);
+    window.addEventListener('mouseup', handleMouseUp);
+    window.addEventListener('contextmenu', handleContextMenu);
+
+    const container = scrollContainerRef.current;
+    const handleScroll = () => {
+        if (!container) return;
+        const scrollTop = container.scrollTop;
+        const velocity = scrollTop - lastScrollTop.current;
+        lastScrollTop.current = scrollTop;
+        setScrollVelocity(velocity);
+
+        if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current);
+        scrollTimeoutRef.current = window.setTimeout(() => setScrollVelocity(0), 100);
+
+        if (container.scrollTop > 10) setHasScrolled(true);
+    };
+    container?.addEventListener('scroll', handleScroll, { passive: true });
+
+    return () => {
+        window.removeEventListener('mousemove', handleMouseMove);
+        window.removeEventListener('mousedown', handleMouseDown);
+        window.removeEventListener('mouseup', handleMouseUp);
+        window.removeEventListener('contextmenu', handleContextMenu);
+        container?.removeEventListener('scroll', handleScroll);
+        if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current);
+    };
   }, []);
 
   // State and logic for scroll indicator
   const [hasScrolled, setHasScrolled] = useState(false);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const container = scrollContainerRef.current;
-    const handleScroll = () => {
-      if (container && container.scrollTop > 10) {
-        setHasScrolled(true);
-      }
-    };
-    container?.addEventListener('scroll', handleScroll, { passive: true });
-    return () => container?.removeEventListener('scroll', handleScroll);
-  }, []);
   
   // State for earthquake modal and data
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -81,7 +121,7 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
-  // NEW: State for earthquake toast notification
+  // State for toast notifications
   const [toastInfo, setToastInfo] = useState<{ id: string; message: string } | null>(null);
   const lastEarthquakeIdRef = useRef<string | null>(null);
 
@@ -116,12 +156,10 @@ export default function App() {
     return () => clearInterval(intervalId);
   }, []);
 
-  // Effect for auto-dismissing the toast
+  // Effect for auto-dismissing toasts
   useEffect(() => {
     if (toastInfo) {
-      const timer = setTimeout(() => {
-        setToastInfo(null);
-      }, 6000); // Dismiss after 6 seconds
+      const timer = setTimeout(() => setToastInfo(null), 6000);
       return () => clearTimeout(timer);
     }
   }, [toastInfo]);
@@ -333,11 +371,43 @@ export default function App() {
     sections.forEach((section) => { if (section) observer.observe(section); });
     return () => { sections.forEach((section) => { if (section) observer.unobserve(section); }); };
   }, []);
+  
+  const clickCount = useRef(0);
+  const clickTimer = useRef<number | null>(null);
+  const handleTitleClick = () => {
+    clickCount.current += 1;
+    if (clickTimer.current) clearTimeout(clickTimer.current);
+    if (clickCount.current >= 5) {
+      const canvasConfetti = (window as any).confetti;
+      if (canvasConfetti) {
+          canvasConfetti({ particleCount: 150, spread: 90, zIndex: 100 });
+      }
+      clickCount.current = 0;
+    } else {
+      clickTimer.current = window.setTimeout(() => {
+        clickCount.current = 0;
+      }, 800);
+    }
+  };
 
   const age = calculateAge(new Date('2013-01-01'));
 
   return (
     <main ref={mainRef} className={`relative h-screen text-slate-800 antialiased overflow-hidden transition-colors duration-700 ease-in-out ${sectionBackgrounds[activeSection]}`}>
+      {/* --- Mouse Force Field Visualizer --- */}
+      <div
+        className="fixed pointer-events-none z-40 rounded-full border-2 border-dashed transition-all duration-300 ease-out"
+        style={{
+          left: mouseState.x,
+          top: mouseState.y,
+          transform: 'translate(-50%, -50%)',
+          width: (mouseState.isLeftDown || mouseState.isRightDown) ? '300px' : '0px',
+          height: (mouseState.isLeftDown || mouseState.isRightDown) ? '300px' : '0px',
+          opacity: (mouseState.isLeftDown || mouseState.isRightDown) ? 1 : 0,
+          borderColor: mouseState.isRightDown ? 'rgba(59, 130, 246, 0.5)' : 'rgba(239, 68, 68, 0.5)' // Blue for pull, Red for push
+        }}
+      />
+      
       <div
         ref={cursorOuterRef}
         className="fixed pointer-events-none z-50"
@@ -346,8 +416,10 @@ export default function App() {
         <div
           className={`w-8 h-8 rounded-full transition-all duration-200 ease-in-out ${
             isHoveringLink
-              ? 'bg-yellow-400 scale-150'
-              : 'bg-transparent border-2 border-yellow-400'
+              ? 'bg-blue-400 scale-150'
+              : mouseState.isLeftDown || mouseState.isRightDown
+              ? 'bg-blue-400/50 scale-125'
+              : 'bg-transparent border-2 border-blue-400'
           }`}
           style={{ transform: 'translate(-50%, -50%)' }}
         />
@@ -360,7 +432,13 @@ export default function App() {
       
       {showConfetti && <Confetti onAnimationEnd={onAnimationEnd} />}
       
-      <BackgroundShapes obstacles={obstacles} onUiCollision={handleUiCollision} generationTrigger={generationTrigger} />
+      <BackgroundShapes 
+        obstacles={obstacles} 
+        onUiCollision={handleUiCollision} 
+        generationTrigger={generationTrigger}
+        mouseState={mouseState}
+        scrollVelocity={scrollVelocity}
+      />
       
       {Object.entries(uiIndicators).map(([id, indicator]) => (
           <div key={id} className="ui-indicator-segment" style={indicator.style} />
@@ -409,7 +487,7 @@ export default function App() {
         {isCooldown ? (
           <ClockIcon className="w-6 h-6 text-slate-600" />
         ) : (
-          <PartyPopperIcon className="w-6 h-6 text-yellow-600" />
+          <PartyPopperIcon className="w-6 h-6 text-rose-500" />
         )}
       </button>
 
@@ -419,7 +497,12 @@ export default function App() {
              <ProgrammerDayCountdown />
           </div>
           <div className="relative flex flex-col items-center" data-obstacle="true" data-id="hero-title">
-            <h1 className="text-6xl sm:text-8xl font-bold text-orange-500 tracking-tighter">
+            <h1 
+              className="text-6xl sm:text-8xl font-bold text-slate-700 tracking-tighter"
+              onClick={handleTitleClick}
+              role="button"
+              tabIndex={0}
+            >
               Huo_sai
             </h1>
             <p className="mt-4 text-lg sm:text-xl text-slate-600 tracking-wide">
@@ -497,7 +580,7 @@ export default function App() {
             <h2 className="text-4xl sm:text-5xl font-bold tracking-tight mb-10" data-obstacle="true" data-id="contact-title">联系我</h2>
              <div className="flex flex-col sm:flex-row items-center justify-center gap-6 sm:gap-10" data-obstacle="true" data-id="contact-links">
                 <a 
-                  href="mailto:albert.tang_1a@hotmail.com" 
+                  href="mailto:albert.tang_1a@hotmail.com"
                   className="flex items-center gap-3 text-slate-700 hover:text-blue-500 transition-colors duration-300 group"
                   onMouseEnter={() => setIsHoveringLink(true)}
                   onMouseLeave={() => setIsHoveringLink(false)}
@@ -557,14 +640,26 @@ export default function App() {
                      </div>
                   </div>
                   <div className="grid grid-cols-2 gap-x-6 gap-y-4 text-lg">
-                    <div className="font-semibold">最大震度:</div>
-                    <div className="font-bold text-red-600 text-2xl">{earthquakeData.maxInt}</div>
-                    <div className="font-semibold">震级:</div>
-                    <div>M {earthquakeData.magnitude}</div>
-                    <div className="font-semibold">深度:</div>
-                    <div>{earthquakeData.depth}</div>
-                    <div className="font-semibold">海啸消息:</div>
-                    <div className="text-base">{earthquakeData.tsunamiInfo}</div>
+                    <div className="flex items-center gap-3">
+                      <span className="font-semibold text-slate-500 w-16 text-right">震级:</span>
+                      <span className="font-bold">{earthquakeData.magnitude}</span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="font-semibold text-slate-500 w-16 text-right">深度:</span>
+                      <span className="font-bold">{earthquakeData.depth}</span>
+                    </div>
+                     <div className="flex items-center gap-3">
+                      <span className="font-semibold text-slate-500 w-16 text-right">最大震度:</span>
+                      <span className="font-bold text-red-600">{earthquakeData.maxInt}</span>
+                    </div>
+                     <div className="flex items-center gap-3">
+                      <span className="font-semibold text-slate-500 w-16 text-right">EventID:</span>
+                      <span className="font-mono text-sm">{earthquakeData.eventId}</span>
+                    </div>
+                    <div className="col-span-2 flex items-start gap-3 mt-2">
+                      <span className="font-semibold text-slate-500 w-16 text-right shrink-0">海啸信息:</span>
+                      <span className="font-bold">{earthquakeData.tsunamiInfo}</span>
+                    </div>
                   </div>
                 </div>
               )}

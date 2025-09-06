@@ -16,6 +16,9 @@
       overflow: hidden;
       scroll-behavior: smooth; /* Optional: for smoother scrolling between sections */
       font-family: 'JetBrains Mono', monospace; /* Set monospace font globally */
+      user-select: none; /* --- Disable text selection --- */
+      -webkit-user-select: none; /* For Safari */
+      -moz-user-select: none; /* For Firefox */
     }
     /* Hide default cursor to show the custom one */
     body {
@@ -170,7 +173,7 @@
       height: 100%;
       pointer-events: none;
       z-index: 50;
-      box-shadow: inset 0 0 var(--vignette-size, 200px) 50px rgba(251, 191, 36, 0.4); /* yellow-400 with opacity */
+      box-shadow: inset 0 0 var(--vignette-size, 200px) 50px rgba(110, 142, 170, 0.3); /* slate blue with opacity */
       opacity: 0;
       transition: opacity 0.3s ease-out, box-shadow 0.1s linear;
     }
@@ -198,7 +201,7 @@
       position: absolute;
       border-radius: 50%;
       pointer-events: none;
-      transition: opacity 0.2s ease-out;
+      transition: opacity 0.2s ease-out, transform 0.1s linear, background-color 0.1s linear;
       will-change: transform, opacity;
     }
 
@@ -216,6 +219,7 @@
       height: 8px;
       border-radius: 50%;
       pointer-events: none;
+      background-color: var(--dot-color);
       box-shadow: 0 1px 2px rgba(0,0,0,0.3);
       transition: transform 0.2s ease-out, background-color 0.2s ease-in-out;
     }
@@ -230,9 +234,31 @@
       animation: pulse-dot 1.5s infinite;
     }
     
+    .orientation-dot.dot-accelerating {
+      background-color: #f59e0b; /* amber-500 */
+      animation: pulse-dot 1s infinite;
+    }
+    
     .orientation-dot.dot-hovered {
       transform: scale(1.8);
     }
+
+    /* --- NEW: Constellation Line Style --- */
+    .constellation-line {
+      stroke-width: 1px;
+      transition: opacity 0.3s ease-in-out;
+      pointer-events: none;
+    }
+    
+    /* --- NEW: Angle Selector Animation --- */
+    @keyframes spin-slow {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+    .animate-spin-slow {
+      animation: spin-slow 10s linear infinite;
+    }
+
   </style>
 <script type="importmap">
 {
