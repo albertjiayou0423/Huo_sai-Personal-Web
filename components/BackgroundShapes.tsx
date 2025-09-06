@@ -536,8 +536,45 @@ const BackgroundShapes: React.FC<BackgroundShapesProps> = ({ obstacles, onUiColl
              shape.pathIsObstructed = false;
         }
 
-        shape.x += shape.vx;
-        shape.y += shape.vy;
+        // --- NEW: Rear-end collision detection ---
+        if (shape.collisionState === 'none' && !shape.isBoosting) {
+            let rearEndThreat = null;
+            for (const other of allShapes) {
+                if (shape.id === other.id) continue;
+        
+                const relX = other.x - shape.x;
+                const relY = other.y - shape.y;
+                
+                const dotProduct = shape.vx * relX + shape.vy * relY;
+                if (dotProduct > 0) continue; // Other is in front
+        
+                const distSq = relX * relX + relY * relY;
+                if (other.speed > shape.speed * 1.2 && distSq < (150)**2) { // Check if faster and within a certain range
+                    const relVx = other.vx - shape.vx;
+                    const relVy = other.vy - shape.vy;
+                    const relSpeedSq = relVx * relVx + relVy * relVy;
+                    if (relSpeedSq < 0.01) continue;
+                    
+                    const timeToCollision = -dotProduct / relSpeedSq;
+                    
+                    if (timeToCollision > 0 && timeToCollision < 120) { // Collision imminent within 2 seconds
+                        if (!rearEndThreat || timeToCollision < rearEndThreat.time) {
+                            rearEndThreat = { time: timeToCollision };
+                        }
+                    }
+                }
+            }
+            
+            if (rearEndThreat && !shape.pathIsObstructed) {
+                shape.isBoosting = true;
+                shape.evasionCooldownFrames = 60; // Boost for 1 second
+            }
+        }
+
+        if (shape.id !== selectedShapeId) {
+            shape.x += shape.vx;
+            shape.y += shape.vy;
+        }
         
         const isOutOfBounds = shape.x < -padding || shape.x > bounds.width + padding || shape.y < -padding || shape.y > bounds.height + padding;
         const isInvalid = !isFinite(shape.x) || !isFinite(shape.y);

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import BackgroundShapes from './components/BackgroundShapes';
 import Confetti from './components/Confetti';
 import ProgrammerDayCountdown from './components/ProgrammerDayCountdown';
-import { CodeIcon, DesignIcon, GithubIcon, MailIcon, ZapIcon, EarthquakeIcon, PartyPopperIcon, ClockIcon, PaletteIcon } from './components/Icons';
+import { CodeIcon, DesignIcon, GithubIcon, MailIcon, ZapIcon, EarthquakeIcon, PartyPopperIcon, ClockIcon, PaletteIcon, HelpIcon, SparklesIcon, CircleArrowIcon, MoveIcon, MouseClickIcon } from './components/Icons';
 
 // Define background colors for each section using CSS variables
 const sectionBgVars: { [key: string]: string } = {
@@ -173,10 +173,17 @@ export default function App() {
     };
     const handleContextMenu = (e: MouseEvent) => e.preventDefault();
     
+    // --- NEW: Fix for stuck cursor ---
+    const handleBlur = () => {
+        setMouseState(prev => ({ ...prev, isLeftDown: false, isRightDown: false }));
+    };
+
     window.addEventListener('mousemove', handleMouseMove);
     window.addEventListener('mousedown', handleMouseDown);
     window.addEventListener('mouseup', handleMouseUp);
     window.addEventListener('contextmenu', handleContextMenu);
+    window.addEventListener('blur', handleBlur);
+
 
     const container = scrollContainerRef.current;
     const handleScroll = () => {
@@ -198,6 +205,7 @@ export default function App() {
         window.removeEventListener('mousedown', handleMouseDown);
         window.removeEventListener('mouseup', handleMouseUp);
         window.removeEventListener('contextmenu', handleContextMenu);
+        window.removeEventListener('blur', handleBlur);
         container?.removeEventListener('scroll', handleScroll);
         if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current);
     };
@@ -272,6 +280,7 @@ export default function App() {
   const progressTimeoutRef = useRef<number | null>(null);
   
   const [shapeCount, setShapeCount] = useState(0);
+  const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
 
   useEffect(() => {
     const handleGesture = (e: MouseEvent) => {
@@ -476,6 +485,29 @@ export default function App() {
   };
 
   const age = calculateAge(new Date('2013-01-01'));
+  
+  const hiddenFeatures = [
+    {
+        icon: <SparklesIcon className="w-8 h-8 text-amber-500" />,
+        title: "标题彩蛋",
+        description: "连续点击主标题 “Huo_sai” 5次，触发礼花庆祝！"
+    },
+    {
+        icon: <CircleArrowIcon className="w-8 h-8 text-sky-500" />,
+        title: "手势画圈",
+        description: "在屏幕任意位置按住鼠标画一个完整的圆圈，可以生成新的形状。"
+    },
+    {
+        icon: <MoveIcon className="w-8 h-8 text-violet-500" />,
+        title: "精准操控",
+        description: "用鼠标右键点击任意形状，可以将其选中。拖动外围的圆环来改变它的飞行方向。"
+    },
+    {
+        icon: <MouseClickIcon className="w-8 h-8 text-rose-500" />,
+        title: "力场交互",
+        description: "按住鼠标左键会产生一个排斥力场，将周围的形状推开。"
+    }
+  ];
 
   return (
     <main 
@@ -550,7 +582,7 @@ export default function App() {
                   className="inline-flex text-[rgb(var(--text-quaternary))] rounded-md hover:text-[rgb(var(--text-tertiary))] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
                 >
                   <span className="sr-only">Close</span>
-                  <svg className="h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                  <svg className="h-5 w-5" xmlns="http://www.w.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
                     <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
                   </svg>
                 </button>
@@ -563,7 +595,7 @@ export default function App() {
       <button
         onClick={handleConfettiClick}
         disabled={isCooldown}
-        className={`fixed bottom-4 left-4 z-40 p-3 bg-[rgb(var(--background-button))] rounded-full shadow-lg backdrop-blur-sm transition-all duration-200 ${
+        className={`fixed bottom-4 left-4 z-40 p-3 bg-[rgb(var(--background-button))] rounded-full shadow-lg backdrop-blur-sm transition-all duration-200 pointer-events-auto ${
           isCooldown ? 'opacity-50' : 'hover:scale-110'
         }`}
         aria-label="撒花"
@@ -579,7 +611,18 @@ export default function App() {
       </button>
 
       <button
-          className="fixed top-4 right-4 z-40 p-3 bg-[rgb(var(--background-button))] rounded-full shadow-lg backdrop-blur-sm transition-all duration-200 hover:scale-110"
+        onClick={() => setIsHelpModalOpen(true)}
+        className="fixed bottom-4 left-20 z-40 p-3 bg-[rgb(var(--background-button))] rounded-full shadow-lg backdrop-blur-sm transition-all duration-200 hover:scale-110 pointer-events-auto"
+        aria-label="帮助"
+        onMouseEnter={() => setIsHoveringLink(true)}
+        onMouseLeave={() => setIsHoveringLink(false)}
+        data-obstacle="true" data-id="help-button"
+      >
+        <HelpIcon className="w-6 h-6 text-[rgb(var(--text-secondary))]" />
+      </button>
+
+      <button
+          className="fixed top-4 right-4 z-40 p-3 bg-[rgb(var(--background-button))] rounded-full shadow-lg backdrop-blur-sm transition-all duration-200 hover:scale-110 pointer-events-auto"
           aria-label="Toggle Theme"
           onClick={() => setIsPaletteModalOpen(true)}
           onMouseEnter={() => setIsHoveringLink(true)}
@@ -590,7 +633,7 @@ export default function App() {
       </button>
 
       {isPaletteModalOpen && (
-        <div className="fixed inset-0 z-40 flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-40 flex items-center justify-center p-4 pointer-events-auto">
           <div className="absolute inset-0 bg-black/40 animate-fadeIn" onClick={() => setIsPaletteModalOpen(false)}></div>
           <div className="relative flex flex-col items-center gap-4 bg-[rgb(var(--background-card))] p-6 sm:p-8 rounded-lg border border-[rgb(var(--border-primary))] shadow-lg text-left animate-scaleUp">
               <h3 className="text-lg font-semibold text-[rgb(var(--text-secondary))]">选择背景</h3>
@@ -628,7 +671,7 @@ export default function App() {
       )}
       
       {isCustomColorModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-auto">
           <div className="absolute inset-0 bg-black/40 animate-fadeIn" onClick={() => setIsCustomColorModalOpen(false)}></div>
            <div className="relative flex flex-col items-center gap-6 bg-[rgb(var(--background-card))] p-6 sm:p-8 rounded-lg border border-[rgb(var(--border-primary))] shadow-lg text-left animate-scaleUp">
               <h3 className="text-lg font-semibold text-[rgb(var(--text-secondary))]">自定义背景颜色</h3>
@@ -655,10 +698,37 @@ export default function App() {
           </div>
         </div>
       )}
+      
+      {isHelpModalOpen && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center p-4 pointer-events-auto">
+            <div className="absolute inset-0 bg-black/40 animate-fadeIn" onClick={() => setIsHelpModalOpen(false)}></div>
+            <div className="relative w-full max-w-2xl bg-[rgb(var(--background-card))] p-6 sm:p-8 rounded-lg border border-[rgb(var(--border-primary))] shadow-lg text-left animate-scaleUp">
+                <button
+                    onClick={() => setIsHelpModalOpen(false)}
+                    className="absolute top-4 right-4 text-[rgb(var(--text-quaternary))] hover:text-[rgb(var(--text-tertiary))] transition-colors"
+                    aria-label="关闭"
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+                <h2 className="text-2xl font-bold tracking-tight mb-6 text-center text-[rgb(var(--text-secondary))]">隐藏功能说明</h2>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {hiddenFeatures.map((feature, index) => (
+                        <div key={index} className="bg-slate-400/10 p-4 rounded-lg flex flex-col items-center text-center backdrop-blur-sm">
+                            <div className="flex-shrink-0 mb-3">{feature.icon}</div>
+                            <h3 className="text-md font-semibold text-[rgb(var(--text-secondary))] mb-1">{feature.title}</h3>
+                            <p className="text-sm text-[rgb(var(--text-tertiary))]">{feature.description}</p>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        </div>
+      )}
 
       {shapeCount > 45 && (
          <div
-            className="fixed bottom-4 right-4 z-[51] flex items-center gap-3 px-4 py-3 bg-[rgb(var(--background-button-refresh))] rounded-full shadow-lg backdrop-blur-md ring-1 ring-[rgb(var(--ring-primary))] transition-all duration-200 animate-slide-up-fade-in pointer-events-none"
+            className="fixed bottom-4 right-4 z-[51] flex items-center gap-3 px-4 py-3 bg-[rgb(var(--background-button-refresh))] rounded-full shadow-lg backdrop-blur-md ring-1 ring-[rgb(var(--ring-primary))] transition-all duration-200 animate-slide-up-fade-in pointer-events-auto"
             data-obstacle="true" data-id="refresh-prompt"
          >
             <span className="text-sm text-[rgb(var(--text-secondary))] font-medium">是不是有点卡了？刷新一下试试吧</span>
@@ -666,11 +736,11 @@ export default function App() {
       )}
 
       <div ref={scrollContainerRef} className="relative z-10 h-screen w-full snap-y snap-mandatory overflow-y-scroll">
-        <section ref={homeRef} id="home" className="relative h-screen w-full snap-start flex flex-col items-center justify-center text-center p-4 sm:p-8">
-          <div className="absolute top-8 left-1/2 -translate-x-1/2 w-full max-w-md px-4" data-obstacle="true" data-id="countdown">
+        <section ref={homeRef} id="home" className="relative h-screen w-full snap-start flex flex-col items-center justify-center text-center p-4 sm:p-8 pointer-events-none">
+          <div className="absolute top-8 left-1/2 -translate-x-1/2 w-full max-w-md px-4 pointer-events-auto" data-obstacle="true" data-id="countdown">
              <ProgrammerDayCountdown />
           </div>
-          <div className="relative flex flex-col items-center bg-[rgb(var(--background-frosted))] backdrop-blur-md px-12 py-8" data-obstacle="true" data-id="hero-title">
+          <div className="relative flex flex-col items-center bg-[rgb(var(--background-frosted))] backdrop-blur-md px-12 py-8 pointer-events-auto" data-obstacle="true" data-id="hero-title">
             <h1 
               className="text-6xl sm:text-8xl font-bold text-[rgb(var(--text-secondary))] tracking-tighter"
               onClick={handleTitleClick}
@@ -699,8 +769,8 @@ export default function App() {
           </div>
         </section>
 
-        <section ref={aboutRef} id="about" className="h-screen w-full snap-start flex flex-col items-center justify-center p-4 sm:p-8">
-          <div className="relative w-full max-w-4xl text-center">
+        <section ref={aboutRef} id="about" className="h-screen w-full snap-start flex flex-col items-center justify-center p-4 sm:p-8 pointer-events-none">
+          <div className="relative w-full max-w-4xl text-center pointer-events-auto">
             <h2 className="text-4xl sm:text-5xl font-bold tracking-tight mb-12 text-[rgb(var(--text-secondary))]" data-obstacle="true" data-id="about-title">关于我</h2>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8 text-left" data-obstacle="true" data-id="about-cards">
               <div
@@ -749,8 +819,8 @@ export default function App() {
           </div>
         </section>
         
-        <section ref={contactRef} id="contact" className="h-screen w-full snap-start flex flex-col items-center justify-center p-4 sm:p-8">
-           <div className="relative w-full max-w-4xl text-center">
+        <section ref={contactRef} id="contact" className="h-screen w-full snap-start flex flex-col items-center justify-center p-4 sm:p-8 pointer-events-none">
+           <div className="relative w-full max-w-4xl text-center pointer-events-auto">
             <h2 className="text-4xl sm:text-5xl font-bold tracking-tight mb-10 text-[rgb(var(--text-secondary))]" data-obstacle="true" data-id="contact-title">联系我</h2>
              <div className="flex flex-col sm:flex-row items-center justify-center gap-6 sm:gap-10" data-obstacle="true" data-id="contact-links">
                 <a 
@@ -778,7 +848,7 @@ export default function App() {
       </div>
       
       {isModalOpen && (
-        <div className="fixed inset-0 z-40 flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-40 flex items-center justify-center p-4 pointer-events-auto">
           <div className="absolute inset-0 bg-black/40 animate-fadeIn" onClick={() => setIsModalOpen(false)}></div>
           <div className="relative w-full max-w-2xl bg-[rgb(var(--background-card))] p-6 sm:p-8 rounded-lg border border-[rgb(var(--border-primary))] shadow-lg text-left animate-scaleUp">
              <button
