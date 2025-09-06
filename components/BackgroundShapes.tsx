@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 
 // --- TYPE DEFINITIONS ---
@@ -463,78 +464,105 @@ const BackgroundShapes: React.FC<BackgroundShapesProps> = ({ obstacles, onUiColl
     <div className="fixed top-0 left-0 w-full h-full pointer-events-none z-0">
       {shapes.map((shape) => {
         const isSelected = shape.id === selectedShapeId;
-        const style: React.CSSProperties = {
+        const borderRadius = shape.type === 'circle' ? '50%' : '0.5rem';
+
+        const outerContainerStyle: React.CSSProperties = {
+          position: 'absolute',
           width: `${shape.size}px`,
           height: `${shape.size}px`,
-          position: 'absolute',
-          top: 0,
           left: 0,
-          transform: `translate(${shape.x - shape.size / 2}px, ${shape.y - shape.size / 2}px) rotate(${shape.rotation}deg) scale(${shape.scale})`,
+          top: 0,
+          transform: `translate(${shape.x - shape.size / 2}px, ${shape.y - shape.size / 2}px) scale(${shape.scale})`,
           opacity: shape.opacity,
-          backgroundColor: shape.color.fill,
-          border: `2px solid ${shape.color.stroke}`,
-          transition: 'transform 0.05s linear, opacity 0.2s ease-out, box-shadow 0.3s ease-in-out',
-          pointerEvents: 'auto',
+          transition: 'transform 0.05s linear, opacity 0.2s ease-out',
           zIndex: isSelected ? 10 : 1,
+          pointerEvents: 'auto',
         };
 
+        const rotatingContainerStyle: React.CSSProperties = {
+          position: 'relative',
+          width: '100%',
+          height: '100%',
+          transform: `rotate(${shape.rotation}deg)`,
+          transition: 'transform 0.1s linear',
+        };
+        
+        const shapeStyle: React.CSSProperties = {
+          position: 'absolute',
+          width: '100%',
+          height: '100%',
+          backgroundColor: shape.color.fill,
+          border: `2px solid ${shape.color.stroke}`,
+          transition: 'box-shadow 0.3s ease-in-out, transform 0.3s ease-in-out',
+          borderRadius: borderRadius,
+          transform: isSelected ? 'translateY(-10px)' : 'translateY(0px)',
+        };
+        
         if (isSelected) {
-            style.boxShadow = '0 10px 25px -5px rgba(0, 0, 0, 0.2), 0 8px 10px -6px rgba(0, 0, 0, 0.2)';
-            style.transform += ' translateY(-10px)';
+          shapeStyle.boxShadow = '0 10px 25px -5px rgba(0, 0, 0, 0.2), 0 8px 10px -6px rgba(0, 0, 0, 0.2)';
         }
-
+        
+        // --- NEW V2: Indicator Calculation ---
         const isIndicatorVisible = shape.collisionState === 'warning' || shape.collisionState === 'avoiding';
         const isAvoiding = shape.collisionState === 'avoiding';
-        const arrowTurnAngle = Math.sign(shape.avoidanceAngle) * 90;
+        
+        // The indicator's angle relative to the shape's current rotation
+        const relativeIndicatorAngle = findShortestAngle(shape.indicatorAngle - shape.rotation);
+        // The start angle for the conic-gradient, centering the 108deg arc
+        const gradientStartAngle = relativeIndicatorAngle - 54; // 108 / 2 = 54
+
+        // Cast style object to React.CSSProperties to allow for CSS custom properties.
+        const indicatorStyle = {
+          borderRadius,
+          '--indicator-angle': `${gradientStartAngle}deg`,
+        } as React.CSSProperties;
 
         return (
-          <div
-            key={shape.id}
-            style={style}
-            className={shape.type === 'circle' ? 'rounded-full' : 'rounded-lg'}
-            onMouseDown={(e) => handleShapeMouseDown(e, shape.id)}
-            onContextMenu={(e) => e.preventDefault()}
-          >
-            <div
-              className={`orientation-dot ${
-                shape.collisionState === 'warning' ? 'dot-warning' : ''
-              } ${
-                shape.collisionState === 'avoiding' ? 'dot-avoiding' : ''
-              } ${
-                shape.evasionTactic === 'accelerate' ? 'dot-accelerating' : ''
-              }`}
-              style={{'--dot-color': shape.color.stroke} as React.CSSProperties}
-            />
-            <div className="internal-arrow" style={{'--arrow-color': shape.color.stroke} as React.CSSProperties} />
-            
-            {/* --- NEW: Glow Collision Indicator --- */}
-            <div
-              className={`indicator-glow-container ${isIndicatorVisible ? 'visible' : ''} ${isAvoiding ? 'avoiding' : ''}`}
-              style={{ transform: `rotate(${shape.indicatorAngle - 90}deg)` }}
-            >
-              <div className="indicator-glow" />
+          <div key={shape.id} style={outerContainerStyle}>
+            <div style={rotatingContainerStyle}>
+              
+              {/* --- NEW V2: Robust Glow Indicator (Rendered First -> Below) --- */}
               <div
-                className="indicator-glow-arrow"
-                style={{
-                  transform: `translateX(-50%) rotate(${arrowTurnAngle}deg)`,
-                }}
-              />
-            </div>
+                className={`glow-indicator ${isIndicatorVisible ? 'visible' : ''} ${isAvoiding ? 'avoiding' : ''}`}
+                style={indicatorStyle}
+              >
+                <div className="glow-indicator-arc" />
+              </div>
 
-            {isSelected && (
-              <div className="absolute w-full h-full top-0 left-0 flex items-center justify-center">
-                  <div 
+              {/* --- Actual Shape (Rendered Second -> On Top) --- */}
+              <div
+                style={shapeStyle}
+                onMouseDown={(e) => handleShapeMouseDown(e, shape.id)}
+                onContextMenu={(e) => e.preventDefault()}
+              >
+                <div
+                  className={`orientation-dot ${
+                    shape.collisionState === 'warning' ? 'dot-warning' : ''
+                  } ${
+                    shape.collisionState === 'avoiding' ? 'dot-avoiding' : ''
+                  } ${
+                    shape.evasionTactic === 'accelerate' ? 'dot-accelerating' : ''
+                  }`}
+                  style={{ '--dot-color': shape.color.stroke } as React.CSSProperties}
+                />
+                <div className="internal-arrow" style={{ '--arrow-color': shape.color.stroke } as React.CSSProperties} />
+
+                {isSelected && (
+                  <div className="absolute w-full h-full top-0 left-0 flex items-center justify-center">
+                    <div
                       className="relative w-[150%] h-[150%] border-2 border-dashed border-blue-300/70 rounded-full animate-spin-slow"
                       style={{ transform: `rotate(${-shape.rotation}deg)` }}
-                  >
-                    <div 
-                      className="absolute top-[-8px] left-1/2 w-4 h-4 bg-white border-2 border-blue-500 rounded-full cursor-grab active:cursor-grabbing"
-                      style={{ transform: `translateX(-50%) rotate(${shape.rotation}deg)` }}
-                      onMouseDown={handleAngleDragStart}
-                    />
+                    >
+                      <div
+                        className="absolute top-[-8px] left-1/2 w-4 h-4 bg-white border-2 border-blue-500 rounded-full cursor-grab active:cursor-grabbing"
+                        style={{ transform: `translateX(-50%) rotate(${shape.rotation}deg)` }}
+                        onMouseDown={handleAngleDragStart}
+                      />
+                    </div>
                   </div>
+                )}
               </div>
-            )}
+            </div>
           </div>
         );
       })}
