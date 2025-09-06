@@ -49,6 +49,27 @@ const designColors = [
     { bg: 'bg-teal-100', text: 'text-teal-600' },
 ];
 
+function hexToRgb(hex: string): string | null {
+    const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+    return result
+        ? `${parseInt(result[1], 16)} ${parseInt(result[2], 16)} ${parseInt(result[3], 16)}`
+        : null;
+}
+
+function lightenHex(hex: string, percent: number): string {
+    let r = parseInt(hex.substring(1, 3), 16);
+    let g = parseInt(hex.substring(1, 5).substring(2, 4), 16);
+    let b = parseInt(hex.substring(3, 7).substring(2, 4), 16);
+
+    r = Math.min(255, Math.floor(r + (255 - r) * (percent / 100)));
+    g = Math.min(255, Math.floor(g + (255 - g) * (percent / 100)));
+    b = Math.min(255, Math.floor(b + (255 - b) * (percent / 100)));
+
+    const toHex = (c: number) => c.toString(16).padStart(2, '0');
+    return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+}
+
+
 export default function App() {
   const cursorOuterRef = useRef<HTMLDivElement>(null);
   const [isHoveringLink, setIsHoveringLink] = useState(false);
@@ -58,58 +79,81 @@ export default function App() {
   const scrollTimeoutRef = useRef<number | null>(null);
   const lastScrollTop = useRef(0);
 
-  // --- NEW: Theme State ---
-  const [theme, setTheme] = useState('light');
+  // --- REWORKED: Theme State (Background Only) ---
   const [palette, setPalette] = useState('slate');
   const [isPaletteModalOpen, setIsPaletteModalOpen] = useState(false);
-  const longPressTimer = useRef<number | null>(null);
-  const isLongPress = useRef(false);
+  const [isCustomColorModalOpen, setIsCustomColorModalOpen] = useState(false);
+  const [tempCustomColor, setTempCustomColor] = useState(localStorage.getItem('hs-custom-color') || '#f1f5f9');
+  
+  const setCustomPalette = useCallback((color: string) => {
+    const root = document.documentElement;
+    const primaryRgb = hexToRgb(color);
+    if (!primaryRgb) return;
+
+    const homeColor = lightenHex(color, 20);
+    const homeRgb = hexToRgb(homeColor);
+    if (!homeRgb) return;
+    
+    const frostedRgb = hexToRgb(lightenHex(color, 40));
+    if (!frostedRgb) return;
+
+    root.style.setProperty('--background-primary', primaryRgb);
+    root.style.setProperty('--background-home', homeRgb);
+    root.style.setProperty('--background-about', primaryRgb);
+    root.style.setProperty('--background-contact', homeRgb);
+    root.style.setProperty('--background-frosted', `${frostedRgb} / 0.2`);
+  }, []);
 
   // Load theme from localStorage on initial mount
   useEffect(() => {
-    const savedTheme = localStorage.getItem('hs-theme') || 'light';
     const savedPalette = localStorage.getItem('hs-palette') || 'slate';
-    setTheme(savedTheme);
     setPalette(savedPalette);
-  }, []);
+
+    if (savedPalette === 'custom') {
+        const customColor = localStorage.getItem('hs-custom-color');
+        if (customColor) {
+            setTempCustomColor(customColor);
+            setCustomPalette(customColor);
+        }
+    }
+  }, [setCustomPalette]);
 
   // Apply theme to DOM and save to localStorage on change
   useEffect(() => {
     const root = document.documentElement;
-    if (theme === 'dark') {
-      root.classList.add('dark');
+    if (palette === 'custom') {
+      const customColor = localStorage.getItem('hs-custom-color');
+      if (customColor) {
+          setCustomPalette(customColor);
+      }
     } else {
-      root.classList.remove('dark');
+      root.style.removeProperty('--background-primary');
+      root.style.removeProperty('--background-home');
+      root.style.removeProperty('--background-about');
+      root.style.removeProperty('--background-contact');
+      root.style.removeProperty('--background-frosted');
     }
-    localStorage.setItem('hs-theme', theme);
-
+    
     root.dataset.theme = palette;
     localStorage.setItem('hs-palette', palette);
-  }, [theme, palette]);
+  }, [palette, setCustomPalette]);
 
   const palettes = [
       { id: 'slate', name: '默认', bg: 'bg-slate-200' },
       { id: 'rose', name: '玫瑰', bg: 'bg-rose-200' },
       { id: 'teal', name: '青色', bg: 'bg-teal-200' },
+      { id: 'lavender', name: '薰衣草', bg: 'bg-violet-200' },
+      { id: 'mint', name: '薄荷', bg: 'bg-green-100' },
+      { id: 'deep-space', name: '深空', bg: 'bg-slate-800' },
+      { id: 'forest', name: '森林', bg: 'bg-green-900' },
+      { id: 'wine-red', name: '酒红', bg: 'bg-rose-900' },
   ];
-
-  const handleThemeButtonMouseDown = () => {
-      isLongPress.current = false;
-      longPressTimer.current = window.setTimeout(() => {
-          isLongPress.current = true;
-          setIsPaletteModalOpen(true);
-      }, 750);
+  
+  const handleSaveCustomColor = () => {
+    localStorage.setItem('hs-custom-color', tempCustomColor);
+    setPalette('custom');
+    setIsCustomColorModalOpen(false);
   };
-
-  const handleThemeButtonMouseUp = () => {
-      if (longPressTimer.current) {
-          clearTimeout(longPressTimer.current);
-      }
-      if (!isLongPress.current) {
-          setTheme(t => (t === 'light' ? 'dark' : 'light'));
-      }
-  };
-
 
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
@@ -437,7 +481,7 @@ export default function App() {
     <main 
       ref={mainRef} 
       className="relative h-screen text-[rgb(var(--text-primary))] antialiased overflow-hidden transition-colors duration-700 ease-in-out"
-      style={{ backgroundColor: sectionBgVars[activeSection] }}
+      style={{ backgroundColor: `rgb(${sectionBgVars[activeSection]})` }}
     >
       <div
         className="fixed pointer-events-none z-40 rounded-full border-2 border-dashed transition-all duration-300 ease-out"
@@ -483,7 +527,6 @@ export default function App() {
         mouseState={mouseState}
         scrollVelocity={scrollVelocity}
         onShapeCountChange={setShapeCount}
-        theme={theme as 'light' | 'dark'}
       />
       
       {Object.entries(uiIndicators).map(([id, indicator]) => (
@@ -538,13 +581,9 @@ export default function App() {
       <button
           className="fixed top-4 right-4 z-40 p-3 bg-[rgb(var(--background-button))] rounded-full shadow-lg backdrop-blur-sm transition-all duration-200 hover:scale-110"
           aria-label="Toggle Theme"
-          onMouseDown={handleThemeButtonMouseDown}
-          onMouseUp={handleThemeButtonMouseUp}
+          onClick={() => setIsPaletteModalOpen(true)}
           onMouseEnter={() => setIsHoveringLink(true)}
-          onMouseLeave={() => {
-            if (longPressTimer.current) clearTimeout(longPressTimer.current);
-            setIsHoveringLink(false);
-          }}
+          onMouseLeave={() => setIsHoveringLink(false)}
           data-obstacle="true" data-id="theme-button"
         >
           <PaletteIcon className="w-6 h-6 text-[rgb(var(--text-secondary))]" />
@@ -554,8 +593,8 @@ export default function App() {
         <div className="fixed inset-0 z-40 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/40 animate-fadeIn" onClick={() => setIsPaletteModalOpen(false)}></div>
           <div className="relative flex flex-col items-center gap-4 bg-[rgb(var(--background-card))] p-6 sm:p-8 rounded-lg border border-[rgb(var(--border-primary))] shadow-lg text-left animate-scaleUp">
-              <h3 className="text-lg font-semibold text-[rgb(var(--text-secondary))]">选择配色</h3>
-              <div className="flex gap-4">
+              <h3 className="text-lg font-semibold text-[rgb(var(--text-secondary))]">选择背景</h3>
+              <div className="grid grid-cols-4 sm:grid-cols-4 gap-4">
                   {palettes.map(p => (
                       <button 
                           key={p.id}
@@ -568,10 +607,51 @@ export default function App() {
                           className={`flex flex-col items-center gap-2 p-2 rounded-md transition-all ${palette === p.id ? 'ring-2 ring-blue-500' : 'hover:bg-slate-500/10'}`}
                       >
                           <div className={`w-10 h-10 rounded-full ${p.bg}`}></div>
-                          <span className="text-sm text-[rgb(var(--text-tertiary))]">{p.name}</span>
+                          <span className="text-xs text-[rgb(var(--text-tertiary))]">{p.name}</span>
                       </button>
                   ))}
+                  <button
+                      onClick={() => {
+                        setIsPaletteModalOpen(false);
+                        setIsCustomColorModalOpen(true);
+                      }}
+                      onMouseEnter={() => setIsHoveringLink(true)}
+                      onMouseLeave={() => setIsHoveringLink(false)}
+                      className={`flex flex-col items-center gap-2 p-2 rounded-md transition-all ${palette === 'custom' ? 'ring-2 ring-blue-500' : 'hover:bg-slate-500/10'}`}
+                  >
+                      <div className="w-10 h-10 rounded-full bg-gradient-to-br from-red-400 via-yellow-400 to-blue-400"></div>
+                      <span className="text-xs text-[rgb(var(--text-tertiary))]">自定义</span>
+                  </button>
               </div>
+          </div>
+        </div>
+      )}
+      
+      {isCustomColorModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/40 animate-fadeIn" onClick={() => setIsCustomColorModalOpen(false)}></div>
+           <div className="relative flex flex-col items-center gap-6 bg-[rgb(var(--background-card))] p-6 sm:p-8 rounded-lg border border-[rgb(var(--border-primary))] shadow-lg text-left animate-scaleUp">
+              <h3 className="text-lg font-semibold text-[rgb(var(--text-secondary))]">自定义背景颜色</h3>
+              <div className="flex items-center justify-center gap-4">
+                  <input
+                      type="color"
+                      value={tempCustomColor}
+                      onChange={(e) => setTempCustomColor(e.target.value)}
+                      className="w-16 h-16 p-0 border-none rounded-md"
+                  />
+                  <div className="flex flex-col">
+                    <span className="text-sm text-[rgb(var(--text-quaternary))]">当前颜色</span>
+                    <span className="font-mono text-lg text-[rgb(var(--text-secondary))]">{tempCustomColor}</span>
+                  </div>
+              </div>
+              <button
+                onClick={handleSaveCustomColor}
+                onMouseEnter={() => setIsHoveringLink(true)}
+                onMouseLeave={() => setIsHoveringLink(false)}
+                className="px-6 py-2 bg-blue-500 text-white font-semibold rounded-md hover:bg-blue-600 transition-colors"
+              >
+                保存
+              </button>
           </div>
         </div>
       )}

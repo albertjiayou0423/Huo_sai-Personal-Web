@@ -58,6 +58,8 @@ interface Shape {
   pathIsObstructed: boolean;
   ignoresUiObstacles: boolean;
   hobbyState: HobbyState;
+  isBoosting: boolean; // New for acceleration while turning
+  consecutiveTurns: number; // New for cooperative evasion
 }
 
 interface BackgroundShapesProps {
@@ -67,7 +69,6 @@ interface BackgroundShapesProps {
   mouseState: MouseState;
   scrollVelocity: number;
   onShapeCountChange: (count: number) => void;
-  theme: 'light' | 'dark';
 }
 
 // --- CONSTANTS ---
@@ -82,9 +83,9 @@ const colorSchemes: ColorScheme[] = [
 const shapeTypes: ShapeType[] = ['circle', 'rounded-square'];
 const NUM_SHAPES = 8;
 const PREDICTION_FRAMES = 100;
-const EVASION_COOLDOWN_FRAMES = 120;
+const EVASION_COOLDOWN_FRAMES = 15; // Drastically reduced for responsiveness
 const EVASION_TEST_FRAMES = 60; // How "soon" a collision must be to trigger evasion
-const ANIMATION_DURATION = 30;
+const ANIMATION_DURATION = 40; // Increased duration for better pop animation
 const MOUSE_FORCE_STRENGTH = 150;
 const FLOCKING_STRENGTH = 0.0005;
 const CONSTELLATION_DISTANCE = 350;
@@ -106,7 +107,24 @@ const findShortestAngle = (angle: number): number => {
     return angle;
 };
 
+// New easing function for "pop" effect
+const easeOutBack = (x: number): number => {
+    const c1 = 1.70158;
+    const c3 = c1 + 1;
+    return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2);
+};
+
 const shouldShape1Yield = (shape1: Shape, shape2: Shape): boolean => {
+    const shape1Turns = shape1.consecutiveTurns || 0;
+    const shape2Turns = shape2.consecutiveTurns || 0;
+
+    if (shape1Turns > 3 && shape2Turns <= 3) {
+        return false; // shape1 is stressed, so it has priority. shape2 must yield.
+    }
+    if (shape2Turns > 3 && shape1Turns <= 3) {
+        return true; // shape2 is stressed, shape1 must yield.
+    }
+    
     const s1_isReckless = shape1.ignoresUiObstacles;
     const s2_isReckless = shape2.ignoresUiObstacles;
     const s1_typeVal = shape1.type === 'rounded-square' ? 1 : 2;
@@ -158,6 +176,8 @@ const placeShapeOnEdge = (
         avoidanceAngle: 0, evasionCooldownFrames: 0, isHovered: false,
         evasionTactic: 'none',
         pathIsObstructed: false,
+        isBoosting: false,
+        consecutiveTurns: 0,
     });
 };
 
@@ -194,6 +214,8 @@ const createNewShape = (id: number, x: number, y: number): Shape => {
         avoidanceAngle: 0, evasionCooldownFrames: 0, isHovered: false,
         evasionTactic: 'none',
         pathIsObstructed: false,
+        isBoosting: false,
+        consecutiveTurns: 0,
     });
     return newShape as Shape;
 };
@@ -209,7 +231,7 @@ const createInitialShapes = (bounds: { width: number; height: number }): Shape[]
 };
 
 // --- REACT COMPONENT ---
-const BackgroundShapes: React.FC<BackgroundShapesProps> = ({ obstacles, onUiCollision, generationTrigger, mouseState, scrollVelocity, onShapeCountChange, theme }) => {
+const BackgroundShapes: React.FC<BackgroundShapesProps> = ({ obstacles, onUiCollision, generationTrigger, mouseState, scrollVelocity, onShapeCountChange }) => {
   const [shapes, setShapes] = useState<Shape[]>([]);
   const [selectedShapeId, setSelectedShapeId] = useState<number | null>(null);
   const [isDraggingAngle, setIsDraggingAngle] = useState(false);
@@ -329,7 +351,7 @@ const BackgroundShapes: React.FC<BackgroundShapesProps> = ({ obstacles, onUiColl
         if (shape.animationState === 'reforming') {
           shape.animationCounter--;
           const progress = 1 - (shape.animationCounter / ANIMATION_DURATION);
-          shape.scale = progress * progress;
+          shape.scale = easeOutBack(progress); // Use new easing function
           shape.opacity = progress;
           if (shape.animationCounter <= 0) shape.animationState = 'active';
         }
@@ -391,7 +413,7 @@ const BackgroundShapes: React.FC<BackgroundShapesProps> = ({ obstacles, onUiColl
         speed = Math.sqrt(vx * vx + vy * vy);
         
         let targetSpeed = baseSpeed;
-        if (shape.evasionTactic === 'accelerate') {
+        if (shape.isBoosting) {
             targetSpeed *= ACCELERATION_BOOST;
         }
         speed += (targetSpeed - speed) * 0.05;
@@ -426,6 +448,7 @@ const BackgroundShapes: React.FC<BackgroundShapesProps> = ({ obstacles, onUiColl
         if (shape.evasionCooldownFrames <= 0) {
             shape.collisionState = 'none';
             shape.evasionTactic = 'none';
+            shape.isBoosting = false;
             
             const myPath = Array.from({ length: PREDICTION_FRAMES }, (_, i) => ({
                 x: shape.x + shape.vx * i,
@@ -488,15 +511,25 @@ const BackgroundShapes: React.FC<BackgroundShapesProps> = ({ obstacles, onUiColl
                     
                     if (shape.personality === 'fast' && Math.abs(diff) > 135) {
                         shape.evasionTactic = 'accelerate';
+                        shape.isBoosting = true;
+                        shape.consecutiveTurns = 0;
                         shape.avoidanceAngle = 0;
                     } else {
                         shape.evasionTactic = 'turn';
+                        shape.consecutiveTurns = (shape.consecutiveTurns || 0) + 1;
+                        if (Math.random() < 0.3) { // Chance to boost while turning
+                            shape.isBoosting = true;
+                        }
                         const turnDirection = diff > 0 ? -1 : 1;
                         const turnAmount = shape.personality === 'agile' ? 90 : 60;
                         shape.avoidanceAngle = turnDirection * turnAmount;
                         shape.targetRotation = shape.currentRotation + shape.avoidanceAngle;
                     }
+                } else {
+                    shape.consecutiveTurns = 0;
                 }
+            } else {
+                shape.consecutiveTurns = 0;
             }
         } else {
              shape.collisionState = 'avoiding';
@@ -529,11 +562,6 @@ const BackgroundShapes: React.FC<BackgroundShapesProps> = ({ obstacles, onUiColl
     };
   }, [scrollVelocity, mouseState, obstacles, onUiCollision, selectedShapeId, isDraggingAngle]);
   
-  const getThemeAwareFillColor = useCallback((fill: string) => {
-    const opacity = theme === 'dark' ? 0.7 : 0.9;
-    return fill.replace(/[\d\.]+\)$/, `${opacity})`);
-  }, [theme]);
-
   return (
     <div className="fixed top-0 left-0 w-full h-full pointer-events-none z-0">
       {shapes.map((shape) => {
@@ -548,7 +576,7 @@ const BackgroundShapes: React.FC<BackgroundShapesProps> = ({ obstacles, onUiColl
           top: 0,
           transform: `translate(${shape.x - shape.size / 2}px, ${shape.y - shape.size / 2}px) scale(${shape.scale})`,
           opacity: shape.opacity,
-          transition: 'transform 0.05s linear, opacity 0.2s ease-out',
+          transition: 'transform 0.05s linear', // Removed opacity transition for pop effect
           zIndex: isSelected ? 10 : 1,
           pointerEvents: 'auto',
         };
@@ -565,7 +593,7 @@ const BackgroundShapes: React.FC<BackgroundShapesProps> = ({ obstacles, onUiColl
           position: 'absolute',
           width: '100%',
           height: '100%',
-          backgroundColor: getThemeAwareFillColor(shape.color.fill),
+          backgroundColor: shape.color.fill,
           border: `2px solid ${shape.color.stroke}`,
           transition: 'box-shadow 0.3s ease-in-out, transform 0.3s ease-in-out',
           borderRadius: borderRadius,
@@ -611,7 +639,7 @@ const BackgroundShapes: React.FC<BackgroundShapesProps> = ({ obstacles, onUiColl
                   } ${
                     shape.collisionState === 'avoiding' ? 'dot-avoiding' : ''
                   } ${
-                    shape.evasionTactic === 'accelerate' ? 'dot-accelerating' : ''
+                    shape.isBoosting ? 'dot-accelerating' : ''
                   } ${
                     shape.pathIsObstructed && shape.collisionState === 'none' ? 'dot-seen' : ''
                   }`}
