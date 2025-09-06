@@ -72,66 +72,82 @@
       animation: glitch 0.3s cubic-bezier(.25,.46,.45,.94) both;
     }
 
-    /* --- Collision Indicator Styles (Perfect Fit) --- */
-    @keyframes pulse-red-border {
-        0%, 100% { border-color: rgba(239, 68, 68, 0.8); }
-        50% { border-color: rgba(239, 68, 68, 1); }
-    }
-    @keyframes pulse-blue-border {
-        0%, 100% { border-color: rgba(59, 130, 246, 0.8); }
-        50% { border-color: rgba(59, 130, 246, 1); }
+    /* --- Collision Indicator General Animations --- */
+    @keyframes pulse-indicator-opacity {
+        0%, 100% { opacity: 0.7; }
+        50% { opacity: 1; }
     }
     @keyframes pulse-red-bg-soft {
         0%, 100% { background-color: rgba(252, 165, 165, 0.6); }
         50% { background-color: rgba(252, 165, 165, 0.8); }
     }
 
-    /* Base container for shape indicators */
-    .collision-indicator {
+    /* --- NEW: Glow Indicator Styles --- */
+    .indicator-glow-container {
       position: absolute;
-      top: 50%;
-      left: 50%;
-      width: 140%;
-      height: 140%;
-      transform-origin: center center;
-      opacity: 0;
-      transition: opacity 0.2s ease-in-out;
-      pointer-events: none;
-    }
-
-    /* The visible arc of the indicator - now uses border to perfectly fit shape */
-    .indicator-arc {
-      position: absolute;
+      top: 0;
+      left: 0;
       width: 100%;
       height: 100%;
-      border: 2px solid rgba(239, 68, 68, 0.8);
-      clip-path: polygon(50% 0%, 100% 0%, 100% 30%, 50% 50%, 0% 30%, 0% 0%);
-      animation: pulse-red-border 1.5s infinite;
-      transition: border-color 0.3s ease;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.2s ease-in-out, transform 0.1s linear;
+      will-change: transform, opacity;
+      /* Inherit border radius from parent shape */
+      border-radius: inherit;
     }
-    
-    /* Styling for the "avoiding" state */
-    .indicator-avoiding .indicator-arc {
-      border-color: rgba(59, 130, 246, 0.8);
-      animation-name: pulse-blue-border;
+    .indicator-glow-container.visible {
+      opacity: 1;
+      animation: pulse-indicator-opacity 1.5s infinite;
     }
-
-    /* The arrow that shows direction of avoidance */
-    .indicator-arrow {
+    .indicator-glow {
       position: absolute;
-      top: -4px;
+      /* Add a small offset to make the glow appear outside the shape */
+      top: -6px;
+      left: -6px;
+      width: calc(100% + 12px);
+      height: calc(100% + 12px);
+      /* The gradient creates the arc. From red to transparent */
+      background: conic-gradient(
+        from 0deg,
+        rgba(239, 68, 68, 0.8) 0deg,
+        rgba(239, 68, 68, 0.8) 108deg, /* The arc size */
+        transparent 108.1deg,
+        transparent 360deg
+      );
+      filter: blur(8px); /* The GLOW effect */
+      /* Mask ensures the gradient respects the parent's border-radius */
+      -webkit-mask: inherit;
+      mask: inherit;
+      border-radius: inherit;
+    }
+    /* Style for the 'avoiding' state */
+    .indicator-glow-container.avoiding .indicator-glow {
+      background: conic-gradient(
+        from 0deg,
+        rgba(59, 130, 246, 0.8) 0deg,
+        rgba(59, 130, 246, 0.8) 108deg, /* The arc size */
+        transparent 108.1deg,
+        transparent 360deg
+      );
+    }
+    .indicator-glow-arrow {
+      position: absolute;
+      top: -8px; /* Position it on the glow path */
       left: 50%;
       transform: translateX(-50%);
       width: 0;
       height: 0;
       border-left: 6px solid transparent;
       border-right: 6px solid transparent;
-      border-bottom: 8px solid rgba(59, 130, 246, 0.9);
+      border-bottom: 10px solid rgba(59, 130, 246, 0.95); /* Blue arrow */
       opacity: 0;
       transition: opacity 0.3s ease;
       filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.2));
     }
-    .indicator-avoiding .indicator-arrow { opacity: 1; }
+    .indicator-glow-container.avoiding .indicator-glow-arrow {
+      opacity: 1;
+    }
 
     /* Indicator for UI elements (segment style) */
     .ui-indicator-segment {

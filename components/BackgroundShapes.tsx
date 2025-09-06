@@ -78,8 +78,8 @@ const FLOCKING_STRENGTH = 0.0005;
 const CONSTELLATION_DISTANCE = 350;
 const ACCELERATION_BOOST = 1.5;
 const GENERATION_COUNT = 4;
-const GENERATION_RADIUS = 60;
 const MIN_SPEED_FACTOR = 0.2;
+const MAX_SHAPES = 50; // Increased shape limit
 
 // --- HELPER FUNCTIONS ---
 const getAngle = (vx: number, vy: number) => (Math.atan2(vy, vx) * 180) / Math.PI;
@@ -185,21 +185,39 @@ const BackgroundShapes: React.FC<BackgroundShapesProps> = ({ obstacles, onUiColl
   useEffect(() => {
     if (generationTrigger > lastTrigger.current) {
         setShapes(prevShapes => {
-            if (prevShapes.length >= 25) return prevShapes; // Cap the number of shapes
+            if (prevShapes.length >= MAX_SHAPES) return prevShapes;
+            
             const newShapes: Shape[] = [];
             let lastId = (prevShapes.length > 0 ? Math.max(...prevShapes.map(s => s.id)) : -1);
+            
+            const width = window.innerWidth;
+            const height = window.innerHeight;
+            
+            const quadrants = [
+                { xMin: 0, xMax: width / 2, yMin: 0, yMax: height / 2 },         // Top-Left
+                { xMin: width / 2, xMax: width, yMin: 0, yMax: height / 2 },      // Top-Right
+                { xMin: 0, xMax: width / 2, yMin: height / 2, yMax: height },     // Bottom-Left
+                { xMin: width / 2, xMax: width, yMin: height / 2, yMax: height }, // Bottom-Right
+            ];
+
+            // Shuffle quadrants to make generation order random
+            for (let i = quadrants.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [quadrants[i], quadrants[j]] = [quadrants[j], quadrants[i]];
+            }
+
             for (let i = 0; i < GENERATION_COUNT; i++) {
-                const angle = (Math.PI / 2) * i + Math.random() * (Math.PI / 2);
-                const quadrantAngle = angle + (Math.PI / 4) * (Math.random() - 0.5);
-                const x = mouseState.x + Math.cos(quadrantAngle) * GENERATION_RADIUS;
-                const y = mouseState.y + Math.sin(quadrantAngle) * GENERATION_RADIUS;
+                const quadrant = quadrants[i];
+                const x = Math.random() * (quadrant.xMax - quadrant.xMin) + quadrant.xMin;
+                const y = Math.random() * (quadrant.yMax - quadrant.yMin) + quadrant.yMin;
                 newShapes.push(createNewShape(++lastId, x, y));
             }
+
             return [...prevShapes, ...newShapes];
         });
         lastTrigger.current = generationTrigger;
     }
-  }, [generationTrigger, mouseState.x, mouseState.y]);
+  }, [generationTrigger]);
 
   useEffect(() => {
     shapesRef.current = shapes;
@@ -465,6 +483,10 @@ const BackgroundShapes: React.FC<BackgroundShapesProps> = ({ obstacles, onUiColl
             style.transform += ' translateY(-10px)';
         }
 
+        const isIndicatorVisible = shape.collisionState === 'warning' || shape.collisionState === 'avoiding';
+        const isAvoiding = shape.collisionState === 'avoiding';
+        const arrowTurnAngle = Math.sign(shape.avoidanceAngle) * 90;
+
         return (
           <div
             key={shape.id}
@@ -485,19 +507,18 @@ const BackgroundShapes: React.FC<BackgroundShapesProps> = ({ obstacles, onUiColl
             />
             <div className="internal-arrow" style={{'--arrow-color': shape.color.stroke} as React.CSSProperties} />
             
+            {/* --- NEW: Glow Collision Indicator --- */}
             <div
-              className={`collision-indicator ${shape.collisionState === 'avoiding' ? 'indicator-avoiding' : ''}`}
-              style={{
-                transform: `translate(-50%, -50%) rotate(${shape.indicatorAngle - shape.rotation}deg)`,
-                opacity: (shape.collisionState === 'warning' || shape.collisionState === 'avoiding') ? 1 : 0,
-              }}
+              className={`indicator-glow-container ${isIndicatorVisible ? 'visible' : ''} ${isAvoiding ? 'avoiding' : ''}`}
+              style={{ transform: `rotate(${shape.indicatorAngle - 90}deg)` }}
             >
-              <div 
-                className="indicator-arc" 
-                style={{ borderRadius: shape.type === 'circle' ? '50%' : '11.2px' /* 8px (rounded-lg) * 1.4 (scale) */ }}
-              >
-                <div className="indicator-arrow" style={{ transform: `translateX(-50%) rotate(${shape.avoidanceAngle}deg)` }} />
-              </div>
+              <div className="indicator-glow" />
+              <div
+                className="indicator-glow-arrow"
+                style={{
+                  transform: `translateX(-50%) rotate(${arrowTurnAngle}deg)`,
+                }}
+              />
             </div>
 
             {isSelected && (
