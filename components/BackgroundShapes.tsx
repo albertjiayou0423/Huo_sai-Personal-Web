@@ -680,23 +680,29 @@ const BackgroundShapes: React.FC<BackgroundShapesProps> = ({ obstacles, onUiColl
                   style={{ '--dot-color': shape.color.stroke } as React.CSSProperties}
                 />
                 <div className="internal-arrow" style={{ '--arrow-color': arrowColor } as React.CSSProperties} />
-
-                {isSelected && (
-                  <div className="absolute w-full h-full top-0 left-0 flex items-center justify-center">
-                    <div
-                      className="relative w-[150%] h-[150%] border-2 border-dashed border-blue-300/70 rounded-full animate-spin-slow"
-                      style={{ transform: `rotate(${-shape.rotation}deg)` }}
-                    >
-                      <div
-                        className="absolute top-[-8px] left-1/2 w-4 h-4 bg-white border-2 border-blue-500 rounded-full cursor-grab active:cursor-grabbing"
-                        style={{ transform: `translateX(-50%) rotate(${shape.rotation}deg)` }}
-                        onMouseDown={handleAngleDragStart}
-                      />
-                    </div>
-                  </div>
-                )}
               </div>
             </div>
+            {isSelected && (
+              <div className="absolute top-0 left-0 w-full h-full pointer-events-none">
+                {/* Static Ring */}
+                <div className="absolute top-1/2 left-1/2 w-[150%] h-[150%] -translate-x-1/2 -translate-y-1/2 border border-blue-400/50 rounded-full"></div>
+                {/* Line + Handle Container */}
+                <div 
+                  className="absolute top-1/2 left-1/2 w-[75%] h-px"
+                  style={{ 
+                    transform: `rotate(${shape.targetRotation}deg)`, 
+                    transformOrigin: 'left center' 
+                  }}
+                >
+                  <div className="w-full h-full bg-blue-500"></div>
+                  {/* Handle */}
+                  <div 
+                    className="absolute right-[-8px] top-[-8px] w-4 h-4 bg-white border-2 border-blue-500 rounded-full cursor-grab active:cursor-grabbing pointer-events-auto"
+                    onMouseDown={handleAngleDragStart}
+                  />
+                </div>
+              </div>
+            )}
           </div>
         );
       })}

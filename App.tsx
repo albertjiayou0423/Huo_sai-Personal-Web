@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import BackgroundShapes from './components/BackgroundShapes';
 import Confetti from './components/Confetti';
 import ProgrammerDayCountdown from './components/ProgrammerDayCountdown';
@@ -203,6 +204,76 @@ export default function App() {
 
   const [hasScrolled, setHasScrolled] = useState(false);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  
+  const [isScrolling, setIsScrolling] = useState(false);
+  const homeRef = useRef<HTMLElement>(null);
+  const aboutRef = useRef<HTMLElement>(null);
+  const timelineRef = useRef<HTMLElement>(null);
+  const contactRef = useRef<HTMLElement>(null);
+  const sectionRefs = useMemo(() => ({
+      home: homeRef,
+      about: aboutRef,
+      timeline: timelineRef,
+      contact: contactRef
+  }), []);
+  const sectionOrder = useMemo(() => ['home', 'about', 'timeline', 'contact'], []);
+
+  // FIX: Moved the activeSection state declaration here to resolve the "used before declaration" error.
+  const [activeSection, setActiveSection] = useState('home');
+
+  useEffect(() => {
+      const container = scrollContainerRef.current;
+      if (!container) return;
+
+      let scrollTimeout: number;
+
+      const handleWheel = (e: WheelEvent) => {
+          e.preventDefault();
+          
+          if (isScrolling) {
+              return;
+          }
+
+          const currentSectionIndex = sectionOrder.indexOf(activeSection);
+          let nextSectionIndex = -1;
+
+          if (e.deltaY > 20) { // Scrolling down
+              if (currentSectionIndex < sectionOrder.length - 1) {
+                  nextSectionIndex = currentSectionIndex + 1;
+              }
+          } else if (e.deltaY < -20) { // Scrolling up
+              if (currentSectionIndex > 0) {
+                  nextSectionIndex = currentSectionIndex - 1;
+              }
+          }
+
+          if (nextSectionIndex !== -1) {
+              const nextSectionKey = sectionOrder[nextSectionIndex] as keyof typeof sectionRefs;
+              const nextSectionRef = sectionRefs[nextSectionKey];
+
+              if (nextSectionRef.current) {
+                  setIsScrolling(true);
+                  container.scrollTo({
+                      top: nextSectionRef.current.offsetTop,
+                      behavior: 'smooth'
+                  });
+
+                  scrollTimeout = window.setTimeout(() => {
+                      setIsScrolling(false);
+                  }, 1000); 
+              }
+          }
+      };
+      
+      window.addEventListener('wheel', handleWheel, { passive: false });
+
+      return () => {
+        window.removeEventListener('wheel', handleWheel);
+        if (scrollTimeout) {
+          clearTimeout(scrollTimeout);
+        }
+      };
+  }, [activeSection, isScrolling, sectionOrder, sectionRefs]);
   
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [earthquakeData, setEarthquakeData] = useState<EarthquakeInfo | null>(null);
@@ -439,12 +510,6 @@ export default function App() {
     setDesignColorIndex((prevIndex) => (prevIndex + 1) % designColors.length);
   };
 
-  const [activeSection, setActiveSection] = useState('home');
-  const homeRef = useRef<HTMLElement>(null);
-  const aboutRef = useRef<HTMLElement>(null);
-  const timelineRef = useRef<HTMLElement>(null);
-  const contactRef = useRef<HTMLElement>(null);
-
   useEffect(() => {
     const sections = [homeRef.current, aboutRef.current, timelineRef.current, contactRef.current];
     const observer = new IntersectionObserver(
@@ -504,6 +569,9 @@ export default function App() {
       { year: '2022', text: '开始学习编程 (Scratch)', color: 'bg-orange-400' },
       { year: '2023', text: '学习 Python', color: 'bg-sky-400' },
       { year: '2024-2025', text: '专心学习 C++', color: 'bg-blue-500' },
+      { year: '未来', text: '深入学习算法与数据结构', color: 'bg-indigo-500' },
+      { year: '未来', text: '为开源项目做出贡献', color: 'bg-emerald-500' },
+      { year: '目标', text: '成为一名创造有趣、有用东西的工程师', color: 'bg-rose-500' },
   ];
 
   return (
@@ -586,7 +654,7 @@ export default function App() {
                   className="inline-flex text-[rgb(var(--text-quaternary))] rounded-md hover:text-[rgb(var(--text-tertiary))] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
                 >
                   <span className="sr-only">Close</span>
-                  <svg className="h-5 w-5" xmlns="http://www.w.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                  <svg className="h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
                     <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
                   </svg>
                 </button>
@@ -739,7 +807,7 @@ export default function App() {
          </div>
       )}
 
-      <div ref={scrollContainerRef} className="relative z-20 h-screen w-full snap-y snap-mandatory overflow-y-scroll">
+      <div ref={scrollContainerRef} className="relative z-20 h-screen w-full overflow-y-scroll pointer-events-none">
         <section ref={homeRef} id="home" className="relative h-screen w-full snap-start flex flex-col items-center justify-center text-center p-4 sm:p-8">
           <div className="relative flex flex-col items-center bg-[rgb(var(--background-frosted))] backdrop-blur-md px-12 py-8 pointer-events-auto relative z-30" data-obstacle="true" data-id="hero-title">
             <h1 
@@ -775,7 +843,7 @@ export default function App() {
             <h2 className="text-4xl sm:text-5xl font-bold tracking-tight mb-12 text-[rgb(var(--text-secondary))]" data-obstacle="true" data-id="about-title">关于我</h2>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8 text-left" data-obstacle="true" data-id="about-cards">
               <div
-                className="bg-[rgb(var(--background-card))] p-6 rounded-lg border border-[rgb(var(--border-primary))] shadow-sm transition-transform hover:scale-105 duration-300"
+                className="bg-[rgb(var(--background-card))] p-6 rounded-lg border border-[rgb(var(--border-primary))] shadow-sm transition-transform hover:scale-105 duration-300 pointer-events-auto"
                 onClick={handleCodeCardClick} role="button" tabIndex={0}
                 onKeyDown={(e) => e.key === 'Enter' && handleCodeCardClick()}
                 onMouseEnter={() => setIsHoveringLink(true)} onMouseLeave={() => setIsHoveringLink(false)}
@@ -789,7 +857,7 @@ export default function App() {
                 <p className={`mt-4 text-[rgb(var(--text-tertiary))] ${isGlitched ? 'animate-glitch' : ''}`}>主修 C++，享受用代码构建逻辑和解决问题的过程。</p>
               </div>
               <div 
-                className="bg-[rgb(var(--background-card))] p-6 rounded-lg border border-[rgb(var(--border-primary))] shadow-sm transition-transform hover:scale-105 duration-300"
+                className="bg-[rgb(var(--background-card))] p-6 rounded-lg border border-[rgb(var(--border-primary))] shadow-sm transition-transform hover:scale-105 duration-300 pointer-events-auto"
                 onClick={handleEewCardClick} role="button" tabIndex={0}
                 onKeyDown={(e) => e.key === 'Enter' && handleEewCardClick()}
                 onMouseEnter={() => setIsHoveringLink(true)} onMouseLeave={() => setIsHoveringLink(false)}
@@ -803,7 +871,7 @@ export default function App() {
                 <p className="mt-4 text-[rgb(var(--text-tertiary))]">对 EEW (紧急地震速报) 抱有浓厚兴趣，关注防灾减灾技术。</p>
               </div>
               <div
-                className="bg-[rgb(var(--background-card))] p-6 rounded-lg border border-[rgb(var(--border-primary))] shadow-sm transition-transform hover:scale-105 duration-300"
+                className="bg-[rgb(var(--background-card))] p-6 rounded-lg border border-[rgb(var(--border-primary))] shadow-sm transition-transform hover:scale-105 duration-300 pointer-events-auto"
                 onClick={handleDesignCardClick} role="button" tabIndex={0}
                 onKeyDown={(e) => e.key === 'Enter' && handleDesignCardClick()}
                 onMouseEnter={() => setIsHoveringLink(true)} onMouseLeave={() => setIsHoveringLink(false)}
@@ -825,7 +893,7 @@ export default function App() {
             <h2 className="text-4xl sm:text-5xl font-bold tracking-tight mb-16 text-[rgb(var(--text-secondary))]" data-obstacle="true" data-id="timeline-title">
               编程之旅
             </h2>
-            <div className="relative w-full max-w-3xl mx-auto" data-obstacle="true" data-id="timeline-cards">
+            <div className="relative w-full max-w-3xl mx-auto pointer-events-auto" data-obstacle="true" data-id="timeline-cards">
               <div className="absolute left-4 md:left-1/2 top-2 h-full w-0.5 bg-slate-300 -translate-x-1/2" />
               {timelineData.map((item, index) => (
                 <div key={index} className={`relative flex items-center mb-12 ${index % 2 === 0 ? 'md:flex-row-reverse' : 'md:flex-row'}`}>
@@ -847,7 +915,7 @@ export default function App() {
         <section ref={contactRef} id="contact" className="h-screen w-full snap-start flex flex-col items-center justify-center p-4 sm:p-8">
           <div className="relative w-full max-w-4xl text-center pointer-events-auto z-30">
             <h2 className="text-4xl sm:text-5xl font-bold tracking-tight mb-8 text-[rgb(var(--text-secondary))]" data-obstacle="true" data-id="contact-title">联系我</h2>
-            <div className="flex justify-center items-center gap-8" data-obstacle="true" data-id="contact-links">
+            <div className="flex justify-center items-center gap-8 pointer-events-auto" data-obstacle="true" data-id="contact-links">
               <a href="mailto:albert.tang_1a@hotmail.com" className="group" onMouseEnter={() => setIsHoveringLink(true)} onMouseLeave={() => setIsHoveringLink(false)}>
                 <div className="flex flex-col items-center gap-2">
                   <MailIcon className="w-10 h-10 text-[rgb(var(--text-quaternary))] group-hover:text-[rgb(var(--text-link-hover))] transition-colors" />
