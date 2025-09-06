@@ -1,9 +1,13 @@
 
+
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import BackgroundShapes from './components/BackgroundShapes';
 import Confetti from './components/Confetti';
 import ProgrammerDayCountdown from './components/ProgrammerDayCountdown';
-import { CodeIcon, DesignIcon, GithubIcon, MailIcon, ZapIcon, EarthquakeIcon, PartyPopperIcon, ClockIcon, PaletteIcon, HelpIcon, SparklesIcon, CircleArrowIcon, MoveIcon, MouseClickIcon, MagnetIcon } from './components/Icons';
+import { CodeIcon, DesignIcon, GithubIcon, MailIcon, ZapIcon, EarthquakeIcon, PartyPopperIcon, ClockIcon, PaletteIcon, HelpIcon, SparklesIcon, CircleArrowIcon, MoveIcon, MouseClickIcon, MagnetIcon, SoundIcon, MuteIcon } from './components/Icons';
+import { useDailyGreeting } from './hooks/useDailyGreeting';
+import { useSound } from './hooks/useSound';
+
 
 // Define background colors for each section using CSS variables
 const sectionBgVars: { [key: string]: string } = {
@@ -13,14 +17,19 @@ const sectionBgVars: { [key: string]: string } = {
   contact: 'var(--background-contact)',
 };
 
+// --- Unified EEW Data Structure ---
 interface EarthquakeInfo {
+  source: string; // JMA, Sichuan, CENC, Fujian
   hypocenter?: string;
   maxInt?: string;
   magnitude?: string;
   depth?: string;
   originTime?: string;
-  tsunamiInfo?: string;
+  reportTime?: string;
   eventId?: string;
+  isFinal?: boolean;
+  isCancel?: boolean;
+  tsunamiInfo?: string; // JMA specific
 }
 
 interface Obstacle {
@@ -72,6 +81,21 @@ function lightenHex(hex: string, percent: number): string {
     return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
 }
 
+// --- NEW: Time parsing helper for EEW ---
+const parseEewTime = (timeStr: string | undefined, timezoneOffset: number): Date | null => {
+    if (!timeStr) return null;
+    const cleanedStr = timeStr.replace(/\//g, '-').trim();
+    const parts = cleanedStr.match(/^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2})$/);
+    if (!parts) return null;
+
+    const [_, year, month, day, hour, minute, second] = parts.map(Number);
+    const utcDate = new Date(Date.UTC(year, month - 1, day, hour, minute, second));
+    
+    utcDate.setUTCHours(utcDate.getUTCHours() - timezoneOffset);
+    
+    return utcDate;
+}
+
 
 export default function App() {
   const cursorOuterRef = useRef<HTMLDivElement>(null);
@@ -83,6 +107,10 @@ export default function App() {
   const [isPaletteModalOpen, setIsPaletteModalOpen] = useState(false);
   const [isCustomColorModalOpen, setIsCustomColorModalOpen] = useState(false);
   const [tempCustomColor, setTempCustomColor] = useState(localStorage.getItem('hs-custom-color') || '#f1f5f9');
+
+  // --- NEW: Feature hooks ---
+  const dailyGreeting = useDailyGreeting();
+  const { isMuted, toggleMute, playSound, stopSound } = useSound();
   
   const setCustomPalette = useCallback((color: string) => {
     const root = document.documentElement;
@@ -149,6 +177,7 @@ export default function App() {
   ];
   
   const handleSaveCustomColor = () => {
+    playSound('click');
     localStorage.setItem('hs-custom-color', tempCustomColor);
     setPalette('custom');
     setIsCustomColorModalOpen(false);
@@ -218,6 +247,15 @@ export default function App() {
     };
   }, []);
 
+  // --- Sound effect for force field ---
+  useEffect(() => {
+    if (mouseState.isLeftDown) {
+      playSound('hum', { loop: true });
+    } else {
+      stopSound('hum');
+    }
+  }, [mouseState.isLeftDown, playSound, stopSound]);
+
   const [hasScrolled, setHasScrolled] = useState(false);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   
@@ -233,7 +271,6 @@ export default function App() {
   }), []);
   const sectionOrder = useMemo(() => ['home', 'about', 'timeline', 'contact'], []);
 
-  const [activeSection, setActiveSection] = useState('home');
   const activeSectionRef = useRef('home');
   const isScrollingRef = useRef(false);
   const scrollTimeoutRef = useRef<number | null>(null);
@@ -297,46 +334,123 @@ export default function App() {
     };
   }, [sectionOrder, sectionRefs]);
   
+  const [activeSection, setActiveSection] = useState('home');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [earthquakeData, setEarthquakeData] = useState<EarthquakeInfo | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
-  const [toastInfo, setToastInfo] = useState<{ id: string; message: string } | null>(null);
-  const lastEarthquakeIdRef = useRef<string | null>(null);
+  const [toastInfo, setToastInfo] = useState<{ id: string; message: string; source: string; } | null>(null);
+  const lastEventIdRef = useRef<Record<string, string | null>>({});
 
-  useEffect(() => {
-    const fetchLatestEarthquake = async () => {
-      try {
-        const response = await fetch('https://dev.narikakun.net/webapi/earthquake/post_data.json');
-        if (!response.ok) return;
-        const data = await response.json();
-        const eventId = data.Head?.EventID;
-
-        if (lastEarthquakeIdRef.current === null) {
-            lastEarthquakeIdRef.current = eventId;
-            return;
-        }
-
-        if (eventId && eventId !== lastEarthquakeIdRef.current) {
-          lastEarthquakeIdRef.current = eventId;
-          const message = `${data.Body?.Earthquake?.Hypocenter?.Name || 'N/A'} 最大震度: ${data.Body?.Intensity?.Observation?.MaxInt || 'N/A'}`;
-          setToastInfo({ id: eventId, message });
-        }
-      } catch (error) {
-        console.error("Error fetching earthquake data:", error);
+  // --- REWORKED & FIXED: Unified EEW Parser (more robust) ---
+  const parseEewData = useCallback((data: any): EarthquakeInfo | null => {
+    try {
+      // 1. Filter out invalid packets like heartbeats or empty objects
+      if (!data || typeof data !== 'object' || Object.keys(data).length === 0 || data.type === 'heartbeat') {
+        return null;
       }
+
+      // 2. A report is considered potentially valid if it has an EventID or a Hypocenter.
+      const eventId = data.EventID;
+      const hypocenter = data.Hypocenter ?? data.HypoCenter;
+      
+      // If it has neither of these, it's not a useful/valid alert.
+      if (!eventId && !hypocenter) {
+        return null;
+      }
+      
+      const magnitude = data.Magunitude ?? data.Magnitude;
+      
+      let sourceName = '';
+      switch(data.type) {
+        case 'jma_eew': sourceName = '日本气象厅 (JMA)'; break;
+        case 'sc_eew': sourceName = '四川省地震局'; break;
+        case 'cenc_eew': sourceName = '中国地震台网中心 (CENC)'; break;
+        case 'fj_eew': sourceName = '福建省地震局'; break;
+        default: sourceName = '未知来源';
+      }
+
+      // 4. Return the best-effort parsed object.
+      return {
+        source: sourceName,
+        hypocenter: hypocenter,
+        maxInt: data.MaxIntensity?.toString(),
+        magnitude: magnitude,
+        depth: data.Depth != null ? `${data.Depth}km` : undefined,
+        originTime: data.OriginTime,
+        reportTime: data.ReportTime ?? data.AnnouncedTime,
+        eventId: eventId,
+        isFinal: data.isFinal,
+        isCancel: data.isCancel,
+        tsunamiInfo: data.Title?.includes('津波') ? '有' : '无',
+      };
+    } catch (e) {
+      console.error("Error parsing EEW data:", e, data);
+      return null;
+    }
+  }, []);
+
+
+  // --- REWORKED: GET Polling for Real-time EEW ---
+  useEffect(() => {
+    const eewSources = [
+        { name: 'jma_eew', tz: 9 },
+        { name: 'sc_eew', tz: 8 },
+        { name: 'cenc_eew', tz: 8 },
+        { name: 'fj_eew', tz: 8 },
+    ];
+
+    const poll = async () => {
+        const requests = eewSources.map(source => 
+            fetch(`https://api.wolfx.jp/${source.name}.json`)
+                .then(res => res.ok ? res.json() : Promise.reject(`Failed to fetch ${source.name}`))
+                .then(data => ({ ...data, tz: source.tz }))
+                .catch(error => null) // Return null on error to not break Promise.all
+        );
+
+        const results = await Promise.all(requests);
+        
+        const now = Date.now();
+        const threeMinutesAgo = now - (3 * 60 * 1000);
+
+        for (const data of results) {
+            if (data) {
+                const parsedData = parseEewData(data);
+                
+                if (parsedData?.eventId && parsedData.reportTime) {
+                    // Check if this is a new event
+                    if (lastEventIdRef.current[parsedData.source] !== parsedData.eventId) {
+                        const reportDate = parseEewTime(parsedData.reportTime, data.tz);
+                        
+                        // Check if it's recent (within 3 minutes)
+                        if (reportDate && reportDate.getTime() > threeMinutesAgo) {
+                            lastEventIdRef.current[parsedData.source] = parsedData.eventId;
+                            
+                            // Trigger alert: set toast AND modal
+                            const message = `${parsedData.hypocenter || 'N/A'} M${parsedData.magnitude || '?'} 最大烈度: ${parsedData.maxInt || 'N/A'}`;
+                            setToastInfo({ id: parsedData.eventId, message, source: parsedData.source });
+                            
+                            setEarthquakeData(parsedData);
+                            setIsModalOpen(true);
+                            setIsLoading(false);
+                            setError(null);
+                        }
+                    }
+                }
+            }
+        }
     };
-    
-    fetchLatestEarthquake();
-    const intervalId = setInterval(fetchLatestEarthquake, 60000);
+
+    poll(); // Initial poll
+    const intervalId = setInterval(poll, 7000); // Poll every 7 seconds
 
     return () => clearInterval(intervalId);
-  }, []);
+  }, [parseEewData]);
 
   useEffect(() => {
     if (toastInfo) {
-      const timer = setTimeout(() => setToastInfo(null), 6000);
+      const timer = setTimeout(() => setToastInfo(null), 8000);
       return () => clearTimeout(timer);
     }
   }, [toastInfo]);
@@ -488,6 +602,7 @@ export default function App() {
 
   const handleConfettiClick = () => {
     if (isCooldown) return;
+    playSound('click');
     setShowConfetti(true);
     setIsCooldown(true);
     setTimeout(() => { setIsCooldown(false); }, 30000);
@@ -495,40 +610,44 @@ export default function App() {
   
   const onAnimationEnd = useCallback(() => { setShowConfetti(false); }, []);
 
-  const handleEewCardClick = async () => {
+  // --- Multi-source EEW fetch handler ---
+  const handleEewSourceClick = async (source: 'jma' | 'sc' | 'cenc' | 'fj') => {
+    playSound('click');
     setIsModalOpen(true);
     setIsLoading(true);
     setError(null);
     setEarthquakeData(null);
     
     try {
-      const response = await fetch('https://dev.narikakun.net/webapi/earthquake/post_data.json');
+      const response = await fetch(`https://api.wolfx.jp/${source}_eew.json`);
       if (!response.ok) throw new Error('网络响应错误，请稍后重试。');
       const data = await response.json();
       
-      const parsedData: EarthquakeInfo = {
-        hypocenter: data.Body?.Earthquake?.Hypocenter?.Name || 'N/A',
-        maxInt: data.Body?.Intensity?.Observation?.MaxInt || 'N/A',
-        magnitude: data.Body?.Earthquake?.Magnitude || 'N/A',
-        depth: data.Body?.Earthquake?.Hypocenter?.Depth ? `${data.Body.Earthquake.Hypocenter.Depth}km` : 'N/A',
-        originTime: data.Body?.Earthquake?.OriginTime || 'N/A',
-        tsunamiInfo: data.Body?.Comments?.Observation || '无',
-        eventId: data.Head?.EventID || 'N/A',
-      };
+      const parsedData = parseEewData(data);
+       // FIX: Handle "no report" gracefully instead of showing an error.
+      if (!parsedData) {
+        setError("当前无最新地震速报。");
+        setEarthquakeData(null); // Explicitly clear data
+        return;
+      }
+
       setEarthquakeData(parsedData);
     } catch (err) {
-      setError(err instanceof Error ? err.message : '发生未知错误');
+      setError('获取或解析数据时出错。');
     } finally {
       setIsLoading(false);
     }
   };
 
+
   const handleCodeCardClick = () => {
+    playSound('click');
     setIsGlitched(true);
     setTimeout(() => setIsGlitched(false), 300);
   };
 
   const handleDesignCardClick = () => {
+    playSound('click');
     setDesignColorIndex((prevIndex) => (prevIndex + 1) % designColors.length);
   };
 
@@ -669,6 +788,7 @@ export default function App() {
         generationTrigger={generationTrigger}
         mouseState={mouseState}
         onShapeCountChange={setShapeCount}
+        playSound={playSound}
       />
       
       {Object.entries(uiIndicators).map(([id, indicator]) => (
@@ -683,12 +803,12 @@ export default function App() {
                 <EarthquakeIcon className="h-6 w-6 text-blue-600" />
               </div>
               <div className="ml-3 w-0 flex-1">
-                <p className="text-sm font-semibold text-[rgb(var(--text-primary))]">新地震情报</p>
+                <p className="text-sm font-semibold text-[rgb(var(--text-primary))]">新地震速报 ({toastInfo.source})</p>
                 <p className="mt-1 text-sm text-[rgb(var(--text-tertiary))]">{toastInfo.message}</p>
               </div>
               <div className="ml-4 flex-shrink-0 flex">
                 <button
-                  onClick={() => setToastInfo(null)}
+                  onClick={() => { setToastInfo(null); playSound('click'); }}
                   className="inline-flex text-[rgb(var(--text-quaternary))] rounded-md hover:text-[rgb(var(--text-tertiary))] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
                 >
                   <span className="sr-only">Close</span>
@@ -709,6 +829,7 @@ export default function App() {
           isCooldown ? 'opacity-50' : 'hover:scale-110'
         }`}
         aria-label="撒花"
+        onMouseDown={() => !isCooldown && playSound('click')}
         onMouseEnter={() => !isCooldown && setIsHoveringLink(true)}
         onMouseLeave={() => setIsHoveringLink(false)}
         data-obstacle="true" data-id="confetti-button"
@@ -721,7 +842,7 @@ export default function App() {
       </button>
 
       <button
-        onClick={() => setIsHelpModalOpen(true)}
+        onClick={() => { setIsHelpModalOpen(true); playSound('click'); }}
         className="fixed bottom-4 left-20 z-40 p-3 bg-[rgb(var(--background-button))] rounded-full shadow-lg backdrop-blur-sm transition-all duration-200 hover:scale-110 pointer-events-auto"
         aria-label="帮助"
         onMouseEnter={() => setIsHoveringLink(true)}
@@ -732,9 +853,24 @@ export default function App() {
       </button>
 
       <button
+        onClick={() => { toggleMute(); playSound('click'); }}
+        className="fixed bottom-4 left-36 z-40 p-3 bg-[rgb(var(--background-button))] rounded-full shadow-lg backdrop-blur-sm transition-all duration-200 hover:scale-110 pointer-events-auto"
+        aria-label={isMuted ? "取消静音" : "静音"}
+        onMouseEnter={() => setIsHoveringLink(true)}
+        onMouseLeave={() => setIsHoveringLink(false)}
+        data-obstacle="true" data-id="mute-button"
+      >
+        {isMuted ? (
+            <MuteIcon className="w-6 h-6 text-[rgb(var(--text-secondary))]" />
+        ) : (
+            <SoundIcon className="w-6 h-6 text-[rgb(var(--text-secondary))]" />
+        )}
+      </button>
+
+      <button
           className="fixed top-4 right-4 z-40 p-3 bg-[rgb(var(--background-button))] rounded-full shadow-lg backdrop-blur-sm transition-all duration-200 hover:scale-110 pointer-events-auto"
           aria-label="Toggle Theme"
-          onClick={() => setIsPaletteModalOpen(true)}
+          onClick={() => { setIsPaletteModalOpen(true); playSound('click'); }}
           onMouseEnter={() => setIsHoveringLink(true)}
           onMouseLeave={() => setIsHoveringLink(false)}
           data-obstacle="true" data-id="theme-button"
@@ -744,7 +880,7 @@ export default function App() {
 
       {isPaletteModalOpen && (
         <div className="fixed inset-0 z-40 flex items-center justify-center p-4 pointer-events-auto">
-          <div className="absolute inset-0 bg-black/40 animate-fadeIn" onClick={() => setIsPaletteModalOpen(false)}></div>
+          <div className="absolute inset-0 bg-black/40 animate-fadeIn" onClick={() => { setIsPaletteModalOpen(false); playSound('click'); }}></div>
           <div className="relative flex flex-col items-center gap-4 bg-[rgb(var(--background-card))] p-6 sm:p-8 rounded-lg border border-[rgb(var(--border-primary))] shadow-lg text-left animate-scaleUp">
               <h3 className="text-lg font-semibold text-[rgb(var(--text-secondary))]">选择背景</h3>
               <div className="grid grid-cols-4 sm:grid-cols-4 gap-4">
@@ -754,6 +890,7 @@ export default function App() {
                           onClick={() => {
                               setPalette(p.id);
                               setIsPaletteModalOpen(false);
+                              playSound('click');
                           }}
                           onMouseEnter={() => setIsHoveringLink(true)}
                           onMouseLeave={() => setIsHoveringLink(false)}
@@ -767,6 +904,7 @@ export default function App() {
                       onClick={() => {
                         setIsPaletteModalOpen(false);
                         setIsCustomColorModalOpen(true);
+                        playSound('click');
                       }}
                       onMouseEnter={() => setIsHoveringLink(true)}
                       onMouseLeave={() => setIsHoveringLink(false)}
@@ -814,7 +952,7 @@ export default function App() {
             <div className="absolute inset-0 bg-black/40 animate-fadeIn" onClick={() => setIsHelpModalOpen(false)}></div>
             <div className="relative w-full max-w-4xl bg-[rgb(var(--background-card))] p-6 sm:p-8 rounded-lg border border-[rgb(var(--border-primary))] shadow-lg text-left animate-scaleUp">
                 <button
-                    onClick={() => setIsHelpModalOpen(false)}
+                    onClick={() => { setIsHelpModalOpen(false); playSound('click'); }}
                     className="absolute top-4 right-4 text-[rgb(var(--text-quaternary))] hover:text-[rgb(var(--text-tertiary))] transition-colors"
                     aria-label="关闭"
                 >
@@ -857,7 +995,7 @@ export default function App() {
               Huo_sai
             </h1>
             <p className="mt-4 text-lg sm:text-xl text-[rgb(var(--text-tertiary))] tracking-wide">
-              初中生 • 编程 • 简洁设计
+              {dailyGreeting}
             </p>
             <p className="mt-2 text-base text-[rgb(var(--text-quaternary))]">
               ({age}岁)
@@ -895,18 +1033,20 @@ export default function App() {
                 <p className={`mt-4 text-[rgb(var(--text-tertiary))] ${isGlitched ? 'animate-glitch' : ''}`}>主修 C++，享受用代码构建逻辑和解决问题的过程。</p>
               </div>
               <div 
-                className="bg-[rgb(var(--background-card))] p-6 rounded-lg border border-[rgb(var(--border-primary))] shadow-sm transition-transform hover:scale-105 duration-300 pointer-events-auto"
-                onClick={handleEewCardClick} role="button" tabIndex={0}
-                onKeyDown={(e) => e.key === 'Enter' && handleEewCardClick()}
-                onMouseEnter={() => setIsHoveringLink(true)} onMouseLeave={() => setIsHoveringLink(false)}
+                className="bg-[rgb(var(--background-card))] p-6 rounded-lg border border-[rgb(var(--border-primary))] shadow-sm transition-transform duration-300 pointer-events-auto"
               >
-                <div className="flex items-center gap-4">
+                <div className="flex items-center gap-4 mb-4">
                   <div className="bg-red-100 p-3 rounded-full flex-shrink-0">
                     <ZapIcon className="w-6 h-6 text-red-600" />
                   </div>
                   <h3 className="text-xl font-semibold text-[rgb(var(--text-secondary))]">EEW</h3>
                 </div>
-                <p className="mt-4 text-[rgb(var(--text-tertiary))]">对 EEW (紧急地震速报) 抱有浓厚兴趣，关注防灾减灾技术。</p>
+                 <div className="grid grid-cols-2 gap-2 text-center">
+                    <button onClick={() => handleEewSourceClick('jma')} onMouseEnter={() => setIsHoveringLink(true)} onMouseLeave={() => setIsHoveringLink(false)} className="text-sm bg-red-500/10 text-red-700 font-semibold py-2 px-2 rounded-md hover:bg-red-500/20 transition-colors">日本(JMA)</button>
+                    <button onClick={() => handleEewSourceClick('sc')} onMouseEnter={() => setIsHoveringLink(true)} onMouseLeave={() => setIsHoveringLink(false)} className="text-sm bg-blue-500/10 text-blue-700 font-semibold py-2 px-2 rounded-md hover:bg-blue-500/20 transition-colors">四川</button>
+                    <button onClick={() => handleEewSourceClick('cenc')} onMouseEnter={() => setIsHoveringLink(true)} onMouseLeave={() => setIsHoveringLink(false)} className="text-sm bg-green-500/10 text-green-700 font-semibold py-2 px-2 rounded-md hover:bg-green-500/20 transition-colors">中国(CENC)</button>
+                    <button onClick={() => handleEewSourceClick('fj')} onMouseEnter={() => setIsHoveringLink(true)} onMouseLeave={() => setIsHoveringLink(false)} className="text-sm bg-amber-500/10 text-amber-700 font-semibold py-2 px-2 rounded-md hover:bg-amber-500/20 transition-colors">福建</button>
+                 </div>
               </div>
               <div
                 className="bg-[rgb(var(--background-card))] p-6 rounded-lg border border-[rgb(var(--border-primary))] shadow-sm transition-transform hover:scale-105 duration-300 pointer-events-auto"
@@ -974,22 +1114,23 @@ export default function App() {
 
         {isModalOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-auto">
-            <div className="absolute inset-0 bg-black/50 animate-fadeIn" onClick={() => setIsModalOpen(false)}></div>
+            <div className="absolute inset-0 bg-black/50 animate-fadeIn" onClick={() => { setIsModalOpen(false); playSound('click'); }}></div>
             <div className="relative bg-[rgb(var(--background-card))] rounded-lg shadow-xl w-full max-w-md text-left overflow-hidden animate-scaleUp">
                 <div className="bg-blue-500 text-white p-4 flex justify-between items-center">
                     <div className="flex items-center gap-3">
                         <ZapIcon className="w-6 h-6" />
-                        <h3 className="text-lg font-semibold">最新地震情报</h3>
+                        <h3 className="text-lg font-semibold">最新地震速报 ({earthquakeData?.source || ''})</h3>
                     </div>
                 </div>
                 <div className="p-6">
                     {isLoading && <p className="text-[rgb(var(--text-tertiary))]">加载中...</p>}
-                    {error && <p className="text-red-500">错误: {error}</p>}
+                    {/* FIX: Use a neutral text color for the error/info message */}
+                    {error && <p className="text-[rgb(var(--text-tertiary))]">{error}</p>}
                     {earthquakeData && (
                         <div>
                             <div className="grid grid-cols-2 gap-4 mb-6 text-center">
                                 <div>
-                                    <p className="text-sm text-[rgb(var(--text-quaternary))]">最大震度</p>
+                                    <p className="text-sm text-[rgb(var(--text-quaternary))]">最大烈度</p>
                                     <p className="text-5xl font-bold text-[rgb(var(--text-primary))]">{earthquakeData.maxInt || 'N/A'}</p>
                                 </div>
                                 <div>
@@ -999,9 +1140,12 @@ export default function App() {
                             </div>
                             <ul className="space-y-2 text-sm text-[rgb(var(--text-secondary))] border-t border-[rgb(var(--border-primary))] pt-4">
                                 <li><strong>震源地:</strong> {earthquakeData.hypocenter}</li>
-                                <li><strong>深度:</strong> {earthquakeData.depth}</li>
+                                {earthquakeData.depth !== 'N/A' && <li><strong>深度:</strong> {earthquakeData.depth}</li>}
                                 <li><strong>发生时间:</strong> {earthquakeData.originTime}</li>
-                                <li><strong>海啸情报:</strong> {earthquakeData.tsunamiInfo}</li>
+                                <li><strong>发布时间:</strong> {earthquakeData.reportTime}</li>
+                                {earthquakeData.tsunamiInfo && <li><strong>海啸情报:</strong> {earthquakeData.tsunamiInfo}</li>}
+                                {typeof earthquakeData.isFinal === 'boolean' && <li><strong>最终报:</strong> {earthquakeData.isFinal ? '是' : '否'}</li>}
+                                {typeof earthquakeData.isCancel === 'boolean' && <li className="font-bold text-red-500"><strong>取消报:</strong> {earthquakeData.isCancel ? '是' : '否'}</li>}
                                 <li className="text-xs text-[rgb(var(--text-quaternary))] pt-2">Event ID: {earthquakeData.eventId}</li>
                             </ul>
                         </div>
@@ -1011,7 +1155,7 @@ export default function App() {
                     <button
                         type="button"
                         className="inline-flex justify-center rounded-md border border-transparent bg-blue-100 px-4 py-2 text-sm font-medium text-blue-900 hover:bg-blue-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
-                        onClick={() => setIsModalOpen(false)}
+                        onClick={() => { setIsModalOpen(false); playSound('click'); }}
                         onMouseEnter={() => setIsHoveringLink(true)} onMouseLeave={() => setIsHoveringLink(false)}
                     >
                         关闭

@@ -1,4 +1,5 @@
 
+
 import React from 'react';
 
 interface IconProps {
@@ -100,5 +101,18 @@ export const MagnetIcon: React.FC<IconProps> = ({ className }) => (
   <svg xmlns="http://www.w3.org/2000/svg" className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M12 18h.01M8.25 21.75c.166 0 .33.003.493.008a6 6 0 0010.514-4.253C19.25 16.32 18.75 12 18.75 12S18 7.679 17.007 6.508a6 6 0 00-10.514 4.253C6.5 11.936 6 15.67 6 17.25c0 .331.003.662.008.988S6.082 21 6.25 21.75m1.992-1.258a6.002 6.002 0 008.016 0M12 2.25v4.5" />
       <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 2.25v3M15.75 2.25v3" />
+  </svg>
+);
+
+export const SoundIcon: React.FC<IconProps> = ({ className }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.108 12 5v14c0 .892-1.077 1.337-1.707.707L5.586 15z" />
+  </svg>
+);
+
+export const MuteIcon: React.FC<IconProps> = ({ className }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.108 12 5v14c0 .892-1.077 1.337-1.707.707L5.586 15z" />
+    <path strokeLinecap="round" strokeLinejoin="round" d="M17 14l-4-4m0 4l4-4" />
   </svg>
 );

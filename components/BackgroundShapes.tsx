@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 
 // --- TYPE DEFINITIONS ---
@@ -7,6 +6,7 @@ type CollisionState = 'none' | 'warning' | 'avoiding';
 type AnimationState = 'active' | 'reforming';
 type Personality = 'agile' | 'fast';
 type EvasionTactic = 'none' | 'turn' | 'accelerate';
+type StuckState = 'none' | 'escaping' | 're-evaluating' | 'random-walk';
 
 interface HobbyState {
     active: boolean;
@@ -62,6 +62,12 @@ interface Shape {
   hobbyState: HobbyState;
   isBoosting: boolean; // New for acceleration while turning
   consecutiveTurns: number; // New for cooperative evasion
+  
+  // New for stuck logic
+  stuckState: StuckState;
+  stuckTimer: number;
+  escapeVector: { x: number; y: number } | null;
+  stuckWithObstacleId: string | number | null;
 }
 
 interface BackgroundShapesProps {
@@ -70,6 +76,7 @@ interface BackgroundShapesProps {
   generationTrigger: number;
   mouseState: MouseState;
   onShapeCountChange: (count: number) => void;
+  playSound: (soundName: 'pop' | 'whoosh') => void;
 }
 
 // --- CONSTANTS ---
@@ -179,6 +186,10 @@ const placeShapeOnEdge = (
         pathIsObstructed: false,
         isBoosting: false,
         consecutiveTurns: 0,
+        stuckState: 'none',
+        stuckTimer: 0,
+        escapeVector: null,
+        stuckWithObstacleId: null,
     });
 };
 
@@ -217,6 +228,10 @@ const createNewShape = (id: number, x: number, y: number): Shape => {
         pathIsObstructed: false,
         isBoosting: false,
         consecutiveTurns: 0,
+        stuckState: 'none',
+        stuckTimer: 0,
+        escapeVector: null,
+        stuckWithObstacleId: null,
     });
     return newShape as Shape;
 };
@@ -232,7 +247,7 @@ const createInitialShapes = (bounds: { width: number; height: number }): Shape[]
 };
 
 // --- REACT COMPONENT ---
-const BackgroundShapes: React.FC<BackgroundShapesProps> = ({ obstacles, onUiCollision, generationTrigger, mouseState, onShapeCountChange }) => {
+const BackgroundShapes: React.FC<BackgroundShapesProps> = ({ obstacles, onUiCollision, generationTrigger, mouseState, onShapeCountChange, playSound }) => {
   const [shapes, setShapes] = useState<Shape[]>([]);
   const [selectedShapeId, setSelectedShapeId] = useState<number | null>(null);
   const [isDraggingAngle, setIsDraggingAngle] = useState(false);
@@ -242,11 +257,10 @@ const BackgroundShapes: React.FC<BackgroundShapesProps> = ({ obstacles, onUiColl
   const dragStartAngleRef = useRef(0);
   const shapeStartAngleRef = useRef(0);
 
-  const initializeShapes = useCallback(() => {
+  useEffect(() => {
+    // Initialize shapes on mount, ensuring window dimensions are available.
     setShapes(createInitialShapes({ width: window.innerWidth, height: window.innerHeight }));
-  }, []);
-
-  useEffect(initializeShapes, [initializeShapes]);
+  }, []); // Empty dependency array ensures this runs only once.
 
   const lastTrigger = useRef(generationTrigger);
   useEffect(() => {
@@ -375,203 +389,301 @@ const BackgroundShapes: React.FC<BackgroundShapesProps> = ({ obstacles, onUiColl
             }
         }
 
-        let { vx, vy, speed, baseSpeed } = shape;
-        
-        const dxMouse = shape.x - mouseState.x;
-        const dyMouse = shape.y - mouseState.y;
-        const distMouseSq = dxMouse * dxMouse + dyMouse * dyMouse;
-        const mouseRadius = 150;
+        // --- NEW: Stuck Logic ---
+        let stuckObstacle: { id: string | number, x: number, y: number } | null = null;
+        const overlapThresholdFactor = 0.5;
 
-        if (mouseState.isLeftDown && distMouseSq < mouseRadius * mouseRadius) {
-            const distMouse = Math.sqrt(distMouseSq);
-            const force = 1 - (distMouse / mouseRadius);
-            let forceFactor = force * MOUSE_FORCE_STRENGTH / (distMouse + 0.1);
-            
-            if (mouseState.isShiftDown) {
-                forceFactor *= -1; // Reverse the force to attract
-            }
-
-            vx += dxMouse * forceFactor * 0.01;
-            vy += dyMouse * forceFactor * 0.01;
-        }
-        
-        let avg_vx = 0, avg_vy = 0, neighbor_count = 0;
+        // Check against other shapes
         for (const other of allShapes) {
-            if (shape.id === other.id) continue;
-            const d_sq = (shape.x - other.x)**2 + (shape.y - other.y)**2;
-            if (d_sq < CONSTELLATION_DISTANCE ** 2) {
-                avg_vx += other.vx;
-                avg_vy += other.vy;
-                neighbor_count++;
+            if (shape.id === other.id || other.id === shape.stuckWithObstacleId) continue;
+            const distSq = (shape.x - other.x) ** 2 + (shape.y - other.y) ** 2;
+            const combinedRadius = (shape.size + other.size) / 2;
+            if (distSq < (combinedRadius * overlapThresholdFactor) ** 2) {
+                stuckObstacle = { id: other.id, x: other.x, y: other.y };
+                break;
             }
         }
-        if (neighbor_count > 0) {
-            avg_vx /= neighbor_count;
-            avg_vy /= neighbor_count;
-            vx += (avg_vx - vx) * FLOCKING_STRENGTH * neighbor_count;
-            vy += (avg_vy - vy) * FLOCKING_STRENGTH * neighbor_count;
-        }
-
-        shape.vx = vx;
-        shape.vy = vy;
-        speed = Math.sqrt(vx * vx + vy * vy);
-        
-        let targetSpeed = baseSpeed;
-        if (shape.isBoosting) {
-            targetSpeed *= ACCELERATION_BOOST;
-        }
-        speed += (targetSpeed - speed) * 0.05;
-        const minSpeed = baseSpeed * MIN_SPEED_FACTOR;
-        if (speed < minSpeed) speed = minSpeed;
-
-        if (shape.hobbyState.active) {
-             const dx = bounds.width / 2 - shape.x;
-             const dy = bounds.height / 2 - shape.y;
-             shape.targetRotation = getAngle(dx, dy);
-        } else if (shape.id !== selectedShapeId || !isDraggingAngle) {
-            const desiredRotation = getAngle(vx, vy);
-            const rotationDiff = findShortestAngle(desiredRotation - shape.targetRotation);
-            shape.targetRotation += rotationDiff * 0.05;
-        }
-        
-        const turnRate = shape.personality === 'agile' ? 0.2 : 0.1;
-        const angleDiff = findShortestAngle(shape.targetRotation - shape.currentRotation);
-        shape.currentRotation += angleDiff * turnRate;
-        shape.rotation = shape.currentRotation;
-
-        const rad = shape.currentRotation * (Math.PI / 180);
-        shape.vx = Math.cos(rad) * speed;
-        shape.vy = Math.sin(rad) * speed;
-        shape.speed = speed;
-
-        if (shape.evasionCooldownFrames > 0) shape.evasionCooldownFrames--;
-
-        let potentialCollision: { time: number; id: number | string; angle: number; isUi: boolean; rect?: DOMRect } | null = null;
-        let isPathObstructed = false;
-        
-        if (shape.evasionCooldownFrames <= 0) {
-            shape.collisionState = 'none';
-            shape.evasionTactic = 'none';
-            shape.isBoosting = false;
-            
-            const myPath = Array.from({ length: PREDICTION_FRAMES }, (_, i) => ({
-                x: shape.x + shape.vx * i,
-                y: shape.y + shape.vy * i,
-            }));
-
-            for (const other of allShapes) {
-                if (shape.id === other.id) continue;
-                for (let i = 0; i < PREDICTION_FRAMES; i++) {
-                    const otherX = other.x + other.vx * i;
-                    const otherY = other.y + other.vy * i;
-                    const distSq = (myPath[i].x - otherX)**2 + (myPath[i].y - otherY)**2;
-                    const combinedRadius = (shape.size + other.size) / 2;
-                    if (distSq < combinedRadius**2) {
-                        isPathObstructed = true;
-                        if (shouldShape1Yield(shape, other)) {
-                            const angleToOther = getAngle(other.x - shape.x, other.y - shape.y);
-                            if (!potentialCollision || i < potentialCollision.time) {
-                                potentialCollision = { time: i, id: other.id, angle: angleToOther, isUi: false };
-                            }
-                        }
-                        break;
-                    }
+        // Check against UI obstacles if not already stuck with a shape
+        if (!stuckObstacle && !shape.ignoresUiObstacles) {
+            for (const obs of obstacles) {
+                if (obs.id === shape.stuckWithObstacleId) continue;
+                const rect = obs.rect;
+                const closestX = Math.max(rect.left, Math.min(shape.x, rect.right));
+                const closestY = Math.max(rect.top, Math.min(shape.y, rect.bottom));
+                const distSq = (shape.x - closestX) ** 2 + (shape.y - closestY) ** 2;
+                if (distSq < (shape.size * overlapThresholdFactor) ** 2) {
+                    stuckObstacle = { id: obs.id, x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+                    break;
                 }
             }
+        }
+
+        // Manage entering/exiting stuck state
+        if (stuckObstacle && shape.stuckState === 'none') {
+            shape.stuckState = 'escaping';
+            shape.stuckTimer = 0;
+            shape.escapeVector = null;
+            shape.stuckWithObstacleId = stuckObstacle.id;
+        } else if (!stuckObstacle && shape.stuckState !== 'none') {
+            shape.stuckState = 'none';
+            shape.stuckTimer = 0;
+            shape.escapeVector = null;
+            shape.stuckWithObstacleId = null;
+        }
+
+        if (shape.stuckState !== 'none' && shape.stuckWithObstacleId !== null) {
+            shape.stuckTimer++;
+            shape.collisionState = 'avoiding'; 
             
-            if (!shape.ignoresUiObstacles) {
-                for (const obs of obstacles) {
-                    const rect = obs.rect;
+            let currentStuckObstacleCenter = {x: 0, y: 0};
+            const obs = obstacles.find(o => o.id === shape.stuckWithObstacleId) 
+                || allShapes.find(s => s.id === shape.stuckWithObstacleId);
+            if(obs) {
+                if ('rect' in obs) {
+                    currentStuckObstacleCenter = { x: obs.rect.left + obs.rect.width / 2, y: obs.rect.top + obs.rect.height / 2 };
+                } else {
+                    currentStuckObstacleCenter = { x: obs.x, y: obs.y };
+                }
+                shape.indicatorAngle = getAngle(currentStuckObstacleCenter.x - shape.x, currentStuckObstacleCenter.y - shape.y);
+            }
+            
+
+            if (shape.stuckTimer > 30 * 60) {
+                shape.stuckState = 'random-walk';
+            } else if (shape.stuckTimer > 10 * 60 && shape.stuckState === 'escaping') {
+                shape.stuckState = 're-evaluating';
+            }
+
+            switch (shape.stuckState) {
+                case 'escaping':
+                    if (!shape.escapeVector && currentStuckObstacleCenter) {
+                        const escapeDx = shape.x - currentStuckObstacleCenter.x;
+                        const escapeDy = shape.y - currentStuckObstacleCenter.y;
+                        const dist = Math.sqrt(escapeDx ** 2 + escapeDy ** 2) || 1;
+                        shape.escapeVector = { x: escapeDx / dist, y: escapeDy / dist };
+                        shape.targetRotation = getAngle(shape.escapeVector.x, shape.escapeVector.y);
+                    }
+                    break;
+                case 're-evaluating':
+                    shape.escapeVector = null;
+                    shape.stuckState = 'escaping';
+                    break;
+                case 'random-walk':
+                    if (shape.stuckTimer % 60 === 0) { // Change direction every second
+                        shape.targetRotation += (Math.random() - 0.5) * 180;
+                    }
+                    break;
+            }
+            
+            const turnRate = 0.1;
+            const angleDiff = findShortestAngle(shape.targetRotation - shape.currentRotation);
+            shape.currentRotation += angleDiff * turnRate;
+            shape.rotation = shape.currentRotation;
+            const rad = shape.currentRotation * (Math.PI / 180);
+            shape.speed = shape.baseSpeed * 0.7; // Move with purpose
+            shape.vx = Math.cos(rad) * shape.speed;
+            shape.vy = Math.sin(rad) * shape.speed;
+
+        } else {
+            // --- NORMAL AI LOGIC ---
+            let { vx, vy, speed, baseSpeed } = shape;
+            
+            const dxMouse = shape.x - mouseState.x;
+            const dyMouse = shape.y - mouseState.y;
+            const distMouseSq = dxMouse * dxMouse + dyMouse * dyMouse;
+            const mouseRadius = 150;
+
+            if (mouseState.isLeftDown && distMouseSq < mouseRadius * mouseRadius) {
+                const distMouse = Math.sqrt(distMouseSq);
+                const force = 1 - (distMouse / mouseRadius);
+                let forceFactor = force * MOUSE_FORCE_STRENGTH / (distMouse + 0.1);
+                
+                if (mouseState.isShiftDown) {
+                    forceFactor *= -1; // Reverse the force to attract
+                }
+
+                vx += dxMouse * forceFactor * 0.01;
+                vy += dyMouse * forceFactor * 0.01;
+            }
+            
+            let avg_vx = 0, avg_vy = 0, neighbor_count = 0;
+            for (const other of allShapes) {
+                if (shape.id === other.id) continue;
+                const d_sq = (shape.x - other.x)**2 + (shape.y - other.y)**2;
+                if (d_sq < CONSTELLATION_DISTANCE ** 2) {
+                    avg_vx += other.vx;
+                    avg_vy += other.vy;
+                    neighbor_count++;
+                }
+            }
+            if (neighbor_count > 0) {
+                avg_vx /= neighbor_count;
+                avg_vy /= neighbor_count;
+                vx += (avg_vx - vx) * FLOCKING_STRENGTH * neighbor_count;
+                vy += (avg_vy - vy) * FLOCKING_STRENGTH * neighbor_count;
+            }
+
+            shape.vx = vx;
+            shape.vy = vy;
+            speed = Math.sqrt(vx * vx + vy * vy);
+            
+            let targetSpeed = baseSpeed;
+            if (shape.isBoosting) {
+                targetSpeed *= ACCELERATION_BOOST;
+            }
+            speed += (targetSpeed - speed) * 0.05;
+            const minSpeed = baseSpeed * MIN_SPEED_FACTOR;
+            if (speed < minSpeed) speed = minSpeed;
+
+            if (shape.hobbyState.active) {
+                const dx = bounds.width / 2 - shape.x;
+                const dy = bounds.height / 2 - shape.y;
+                shape.targetRotation = getAngle(dx, dy);
+            } else if (shape.id !== selectedShapeId || !isDraggingAngle) {
+                const desiredRotation = getAngle(vx, vy);
+                const rotationDiff = findShortestAngle(desiredRotation - shape.targetRotation);
+                shape.targetRotation += rotationDiff * 0.05;
+            }
+            
+            const turnRate = shape.personality === 'agile' ? 0.2 : 0.1;
+            const angleDiff = findShortestAngle(shape.targetRotation - shape.currentRotation);
+            shape.currentRotation += angleDiff * turnRate;
+            shape.rotation = shape.currentRotation;
+
+            const rad = shape.currentRotation * (Math.PI / 180);
+            shape.vx = Math.cos(rad) * speed;
+            shape.vy = Math.sin(rad) * speed;
+            shape.speed = speed;
+
+            if (shape.evasionCooldownFrames > 0) shape.evasionCooldownFrames--;
+
+            let potentialCollision: { time: number; id: number | string; angle: number; isUi: boolean; rect?: DOMRect } | null = null;
+            let isPathObstructed = false;
+            
+            if (shape.evasionCooldownFrames <= 0) {
+                shape.collisionState = 'none';
+                shape.evasionTactic = 'none';
+                shape.isBoosting = false;
+                
+                const myPath = Array.from({ length: PREDICTION_FRAMES }, (_, i) => ({
+                    x: shape.x + shape.vx * i,
+                    y: shape.y + shape.vy * i,
+                }));
+
+                for (const other of allShapes) {
+                    if (shape.id === other.id) continue;
                     for (let i = 0; i < PREDICTION_FRAMES; i++) {
-                        const p = myPath[i];
-                        const halfSize = shape.size / 2;
-                        if (p.x + halfSize > rect.left && p.x - halfSize < rect.right && p.y + halfSize > rect.top && p.y - halfSize < rect.bottom) {
+                        const otherX = other.x + other.vx * i;
+                        const otherY = other.y + other.vy * i;
+                        const distSq = (myPath[i].x - otherX)**2 + (myPath[i].y - otherY)**2;
+                        const combinedRadius = (shape.size + other.size) / 2;
+                        if (distSq < combinedRadius**2) {
                             isPathObstructed = true;
-                            const angleToObs = getAngle(rect.left + rect.width / 2 - shape.x, rect.top + rect.height / 2 - shape.y);
-                            if (!potentialCollision || i < potentialCollision.time) {
-                                potentialCollision = { time: i, id: obs.id, angle: angleToObs, isUi: true, rect };
+                            if (shouldShape1Yield(shape, other)) {
+                                const angleToOther = getAngle(other.x - shape.x, other.y - shape.y);
+                                if (!potentialCollision || i < potentialCollision.time) {
+                                    potentialCollision = { time: i, id: other.id, angle: angleToOther, isUi: false };
+                                }
                             }
                             break;
                         }
                     }
                 }
-            }
-
-            shape.pathIsObstructed = isPathObstructed;
-
-            if (potentialCollision) {
-                shape.collisionState = 'warning';
-                shape.indicatorAngle = potentialCollision.angle;
                 
-                if (potentialCollision.time < EVASION_TEST_FRAMES) {
-                    shape.collisionState = 'avoiding';
-                    shape.evasionCooldownFrames = EVASION_COOLDOWN_FRAMES;
-                    if (potentialCollision.isUi && potentialCollision.rect) {
-                        onUiCollision(potentialCollision.id as string, potentialCollision.angle, potentialCollision.rect);
-                    }
-                    
-                    const angleToThreat = potentialCollision.angle;
-                    const diff = findShortestAngle(angleToThreat - shape.currentRotation);
-                    
-                    if (shape.personality === 'fast' && Math.abs(diff) > 135) {
-                        shape.evasionTactic = 'accelerate';
-                        shape.isBoosting = true;
-                        shape.consecutiveTurns = 0;
-                        shape.avoidanceAngle = 0;
-                    } else {
-                        shape.evasionTactic = 'turn';
-                        shape.consecutiveTurns = (shape.consecutiveTurns || 0) + 1;
-                        if (Math.random() < 0.3) { // Chance to boost while turning
-                            shape.isBoosting = true;
+                if (!shape.ignoresUiObstacles) {
+                    for (const obs of obstacles) {
+                        const rect = obs.rect;
+                        for (let i = 0; i < PREDICTION_FRAMES; i++) {
+                            const p = myPath[i];
+                            const halfSize = shape.size / 2;
+                            if (p.x + halfSize > rect.left && p.x - halfSize < rect.right && p.y + halfSize > rect.top && p.y - halfSize < rect.bottom) {
+                                isPathObstructed = true;
+                                const angleToObs = getAngle(rect.left + rect.width / 2 - shape.x, rect.top + rect.height / 2 - shape.y);
+                                if (!potentialCollision || i < potentialCollision.time) {
+                                    potentialCollision = { time: i, id: obs.id, angle: angleToObs, isUi: true, rect };
+                                }
+                                break;
+                            }
                         }
-                        const turnDirection = diff > 0 ? -1 : 1;
-                        const turnAmount = shape.personality === 'agile' ? 90 : 60;
-                        shape.avoidanceAngle = turnDirection * turnAmount;
-                        shape.targetRotation = shape.currentRotation + shape.avoidanceAngle;
+                    }
+                }
+
+                shape.pathIsObstructed = isPathObstructed;
+
+                if (potentialCollision) {
+                    shape.collisionState = 'warning';
+                    shape.indicatorAngle = potentialCollision.angle;
+                    
+                    if (potentialCollision.time < EVASION_TEST_FRAMES) {
+                        playSound('whoosh');
+                        shape.collisionState = 'avoiding';
+                        shape.evasionCooldownFrames = EVASION_COOLDOWN_FRAMES;
+                        if (potentialCollision.isUi && potentialCollision.rect) {
+                            onUiCollision(potentialCollision.id as string, potentialCollision.angle, potentialCollision.rect);
+                        }
+                        
+                        const angleToThreat = potentialCollision.angle;
+                        const diff = findShortestAngle(angleToThreat - shape.currentRotation);
+                        
+                        if (shape.personality === 'fast' && Math.abs(diff) > 135) {
+                            shape.evasionTactic = 'accelerate';
+                            shape.isBoosting = true;
+                            shape.consecutiveTurns = 0;
+                            shape.avoidanceAngle = 0;
+                        } else {
+                            shape.evasionTactic = 'turn';
+                            shape.consecutiveTurns = (shape.consecutiveTurns || 0) + 1;
+                            if (Math.random() < 0.3) { // Chance to boost while turning
+                                shape.isBoosting = true;
+                            }
+                            const turnDirection = diff > 0 ? -1 : 1;
+                            const turnAmount = shape.personality === 'agile' ? 90 : 60;
+                            shape.avoidanceAngle = turnDirection * turnAmount;
+                            shape.targetRotation = shape.currentRotation + shape.avoidanceAngle;
+                        }
+                    } else {
+                        shape.consecutiveTurns = 0;
                     }
                 } else {
                     shape.consecutiveTurns = 0;
                 }
             } else {
-                shape.consecutiveTurns = 0;
+                shape.collisionState = 'avoiding';
+                shape.pathIsObstructed = false;
             }
-        } else {
-             shape.collisionState = 'avoiding';
-             shape.pathIsObstructed = false;
-        }
 
-        // --- NEW: Rear-end collision detection ---
-        if (shape.collisionState === 'none' && !shape.isBoosting) {
-            let rearEndThreat = null;
-            for (const other of allShapes) {
-                if (shape.id === other.id) continue;
-        
-                const relX = other.x - shape.x;
-                const relY = other.y - shape.y;
-                
-                const dotProduct = shape.vx * relX + shape.vy * relY;
-                if (dotProduct > 0) continue; // Other is in front
-        
-                const distSq = relX * relX + relY * relY;
-                if (other.speed > shape.speed * 1.2 && distSq < (150)**2) { // Check if faster and within a certain range
-                    const relVx = other.vx - shape.vx;
-                    const relVy = other.vy - shape.vy;
-                    const relSpeedSq = relVx * relVx + relVy * relVy;
-                    if (relSpeedSq < 0.01) continue;
+            if (shape.collisionState === 'none' && !shape.isBoosting) {
+                let rearEndThreat = null;
+                for (const other of allShapes) {
+                    if (shape.id === other.id) continue;
+            
+                    const relX = other.x - shape.x;
+                    const relY = other.y - shape.y;
                     
-                    const timeToCollision = -dotProduct / relSpeedSq;
-                    
-                    if (timeToCollision > 0 && timeToCollision < 120) { // Collision imminent within 2 seconds
-                        if (!rearEndThreat || timeToCollision < rearEndThreat.time) {
-                            rearEndThreat = { time: timeToCollision };
+                    const dotProduct = shape.vx * relX + shape.vy * relY;
+                    if (dotProduct > 0) continue; 
+            
+                    const distSq = relX * relX + relY * relY;
+                    if (other.speed > shape.speed * 1.2 && distSq < (150)**2) { 
+                        const relVx = other.vx - shape.vx;
+                        const relVy = other.vy - shape.vy;
+                        const relSpeedSq = relVx * relVx + relVy * relVy;
+                        if (relSpeedSq < 0.01) continue;
+                        
+                        const timeToCollision = -dotProduct / relSpeedSq;
+                        
+                        if (timeToCollision > 0 && timeToCollision < 120) { 
+                            if (!rearEndThreat || timeToCollision < rearEndThreat.time) {
+                                rearEndThreat = { time: timeToCollision };
+                            }
                         }
                     }
                 }
-            }
-            
-            if (rearEndThreat && !shape.pathIsObstructed) {
-                shape.isBoosting = true;
-                shape.evasionCooldownFrames = 60; // Boost for 1 second
+                
+                if (rearEndThreat && !shape.pathIsObstructed) {
+                    shape.isBoosting = true;
+                    shape.evasionCooldownFrames = 60; 
+                }
             }
         }
 
@@ -589,6 +701,7 @@ const BackgroundShapes: React.FC<BackgroundShapesProps> = ({ obstacles, onUiColl
                 setIsDraggingAngle(false);
             }
             placeShapeOnEdge(shape, bounds);
+            playSound('pop');
         }
       }
       
@@ -601,10 +714,44 @@ const BackgroundShapes: React.FC<BackgroundShapesProps> = ({ obstacles, onUiColl
     return () => {
       if (animationFrameId.current) cancelAnimationFrame(animationFrameId.current);
     };
-  }, [mouseState, obstacles, onUiCollision, selectedShapeId, isDraggingAngle]);
+  }, [mouseState, obstacles, onUiCollision, selectedShapeId, isDraggingAngle, playSound]);
+
+  const constellationLines = useMemo(() => {
+    const lines = [];
+    const currentShapes = shapesRef.current;
+    for (let i = 0; i < currentShapes.length; i++) {
+        for (let j = i + 1; j < currentShapes.length; j++) {
+            const shape1 = currentShapes[i];
+            const shape2 = currentShapes[j];
+            const distSq = (shape1.x - shape2.x) ** 2 + (shape1.y - shape2.y) ** 2;
+            if (distSq < CONSTELLATION_DISTANCE ** 2) {
+                const distance = Math.sqrt(distSq);
+                const opacity = (1 - (distance / CONSTELLATION_DISTANCE)) * 0.5;
+                lines.push({
+                    id: `${shape1.id}-${shape2.id}`,
+                    x1: shape1.x, y1: shape1.y,
+                    x2: shape2.x, y2: shape2.y,
+                    opacity: opacity,
+                });
+            }
+        }
+    }
+    return lines;
+  }, [shapes]);
   
   return (
     <div className="fixed top-0 left-0 w-full h-full pointer-events-none z-10">
+      <svg className="absolute top-0 left-0 w-full h-full" style={{ zIndex: 0 }}>
+        {constellationLines.map(line => (
+            <line
+                key={line.id}
+                x1={line.x1} y1={line.y1}
+                x2={line.x2} y2={line.y2}
+                className="constellation-line"
+                style={{ opacity: line.opacity }}
+            />
+        ))}
+      </svg>
       {shapes.map((shape) => {
         const isSelected = shape.id === selectedShapeId;
         const borderRadius = shape.type === 'circle' ? '50%' : '0.5rem';
