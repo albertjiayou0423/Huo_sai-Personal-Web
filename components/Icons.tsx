@@ -1,3 +1,4 @@
+
 import React from 'react';
 
 interface IconProps {
@@ -92,5 +93,12 @@ export const MouseClickIcon: React.FC<IconProps> = ({ className }) => (
   <svg xmlns="http://www.w3.org/2000/svg" className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
     <path strokeLinecap="round" strokeLinejoin="round" d="M15.042 21.672L13.684 16.6m0 0l-2.51 2.225.569-9.47 5.227 7.917-3.286-.672zM12 2.25a8.25 8.25 0 00-8.25 8.25c0 1.832.723 3.535 1.942 4.793l.288-.288A5.25 5.25 0 0112 7.5a5.25 5.25 0 015.02 4.017l.24.003a8.25 8.25 0 00-5.26-9.27z" />
     <path strokeLinecap="round" strokeLinejoin="round" d="M12.75 13.5a.75.75 0 00-1.5 0v2.25a.75.75 0 001.5 0v-2.25z" />
+  </svg>
+);
+
+export const MagnetIcon: React.FC<IconProps> = ({ className }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M12 18h.01M8.25 21.75c.166 0 .33.003.493.008a6 6 0 0010.514-4.253C19.25 16.32 18.75 12 18.75 12S18 7.679 17.007 6.508a6 6 0 00-10.514 4.253C6.5 11.936 6 15.67 6 17.25c0 .331.003.662.008.988S6.082 21 6.25 21.75m1.992-1.258a6.002 6.002 0 008.016 0M12 2.25v4.5" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 2.25v3M15.75 2.25v3" />
   </svg>
 );

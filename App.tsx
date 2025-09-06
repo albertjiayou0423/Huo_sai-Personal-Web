@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import BackgroundShapes from './components/BackgroundShapes';
 import Confetti from './components/Confetti';
 import ProgrammerDayCountdown from './components/ProgrammerDayCountdown';
-import { CodeIcon, DesignIcon, GithubIcon, MailIcon, ZapIcon, EarthquakeIcon, PartyPopperIcon, ClockIcon, PaletteIcon, HelpIcon, SparklesIcon, CircleArrowIcon, MoveIcon, MouseClickIcon } from './components/Icons';
+import { CodeIcon, DesignIcon, GithubIcon, MailIcon, ZapIcon, EarthquakeIcon, PartyPopperIcon, ClockIcon, PaletteIcon, HelpIcon, SparklesIcon, CircleArrowIcon, MoveIcon, MouseClickIcon, MagnetIcon } from './components/Icons';
 
 // Define background colors for each section using CSS variables
 const sectionBgVars: { [key: string]: string } = {
@@ -33,6 +33,7 @@ interface MouseState {
   y: number;
   isLeftDown: boolean;
   isRightDown: boolean;
+  isShiftDown: boolean;
 }
 
 const calculateAge = (birthDate: Date): number => {
@@ -76,7 +77,7 @@ export default function App() {
   const cursorOuterRef = useRef<HTMLDivElement>(null);
   const [isHoveringLink, setIsHoveringLink] = useState(false);
   
-  const [mouseState, setMouseState] = useState<MouseState>({ x: window.innerWidth / 2, y: window.innerHeight / 2, isLeftDown: false, isRightDown: false });
+  const [mouseState, setMouseState] = useState<MouseState>({ x: window.innerWidth / 2, y: window.innerHeight / 2, isLeftDown: false, isRightDown: false, isShiftDown: false });
   
   const [palette, setPalette] = useState('slate');
   const [isPaletteModalOpen, setIsPaletteModalOpen] = useState(false);
@@ -171,14 +172,27 @@ export default function App() {
     };
     const handleContextMenu = (e: MouseEvent) => e.preventDefault();
     
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Shift') {
+        setMouseState(prev => ({ ...prev, isShiftDown: true }));
+      }
+    };
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (e.key === 'Shift') {
+        setMouseState(prev => ({ ...prev, isShiftDown: false }));
+      }
+    };
+
     const handleBlur = () => {
-        setMouseState(prev => ({ ...prev, isLeftDown: false, isRightDown: false }));
+        setMouseState(prev => ({ ...prev, isLeftDown: false, isRightDown: false, isShiftDown: false }));
     };
 
     window.addEventListener('mousemove', handleMouseMove);
     window.addEventListener('mousedown', handleMouseDown);
     window.addEventListener('mouseup', handleMouseUp);
     window.addEventListener('contextmenu', handleContextMenu);
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
     window.addEventListener('blur', handleBlur);
 
 
@@ -197,6 +211,8 @@ export default function App() {
         window.removeEventListener('mousedown', handleMouseDown);
         window.removeEventListener('mouseup', handleMouseUp);
         window.removeEventListener('contextmenu', handleContextMenu);
+        window.removeEventListener('keydown', handleKeyDown);
+        window.removeEventListener('keyup', handleKeyUp);
         window.removeEventListener('blur', handleBlur);
         container?.removeEventListener('scroll', handleScroll);
     };
@@ -574,6 +590,16 @@ export default function App() {
         icon: <MouseClickIcon className="w-8 h-8 text-rose-500" />,
         title: "力场交互",
         description: "按住鼠标左键会产生一个排斥力场，将周围的形状推开。"
+    },
+    {
+        icon: <MagnetIcon className="w-8 h-8 text-blue-500" />,
+        title: "引力力场",
+        description: "按住 Shift + 鼠标左键，可以产生一个引力场，将周围的形状吸引过来。"
+    },
+    {
+        icon: <PaletteIcon className="w-8 h-8 text-emerald-500" />,
+        title: "主题切换",
+        description: "点击右上角的调色盘图标，可以自由切换网站的背景配色方案，包括自定义颜色。"
     }
   ];
   
@@ -605,7 +631,7 @@ export default function App() {
           width: mouseState.isLeftDown ? '300px' : '0px',
           height: mouseState.isLeftDown ? '300px' : '0px',
           opacity: mouseState.isLeftDown ? 0.7 : 0,
-          borderColor: 'rgba(239, 68, 68, 0.5)'
+          borderColor: mouseState.isShiftDown ? 'rgba(59, 130, 246, 0.5)' : 'rgba(239, 68, 68, 0.5)'
         }}
       />
       
@@ -786,7 +812,7 @@ export default function App() {
       {isHelpModalOpen && (
         <div className="fixed inset-0 z-40 flex items-center justify-center p-4 pointer-events-auto">
             <div className="absolute inset-0 bg-black/40 animate-fadeIn" onClick={() => setIsHelpModalOpen(false)}></div>
-            <div className="relative w-full max-w-2xl bg-[rgb(var(--background-card))] p-6 sm:p-8 rounded-lg border border-[rgb(var(--border-primary))] shadow-lg text-left animate-scaleUp">
+            <div className="relative w-full max-w-4xl bg-[rgb(var(--background-card))] p-6 sm:p-8 rounded-lg border border-[rgb(var(--border-primary))] shadow-lg text-left animate-scaleUp">
                 <button
                     onClick={() => setIsHelpModalOpen(false)}
                     className="absolute top-4 right-4 text-[rgb(var(--text-quaternary))] hover:text-[rgb(var(--text-tertiary))] transition-colors"
@@ -797,7 +823,7 @@ export default function App() {
                     </svg>
                 </button>
                 <h2 className="text-2xl font-bold tracking-tight mb-6 text-center text-[rgb(var(--text-secondary))]">隐藏功能说明</h2>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     {hiddenFeatures.map((feature, index) => (
                         <div key={index} className="bg-slate-400/10 p-4 rounded-lg flex flex-col items-center text-center backdrop-blur-sm">
                             <div className="flex-shrink-0 mb-3">{feature.icon}</div>

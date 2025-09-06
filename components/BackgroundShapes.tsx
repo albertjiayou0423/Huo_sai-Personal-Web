@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 
 // --- TYPE DEFINITIONS ---
@@ -28,6 +29,7 @@ interface MouseState {
   y: number;
   isLeftDown: boolean;
   isRightDown: boolean;
+  isShiftDown: boolean;
 }
 
 interface Shape {
@@ -383,7 +385,12 @@ const BackgroundShapes: React.FC<BackgroundShapesProps> = ({ obstacles, onUiColl
         if (mouseState.isLeftDown && distMouseSq < mouseRadius * mouseRadius) {
             const distMouse = Math.sqrt(distMouseSq);
             const force = 1 - (distMouse / mouseRadius);
-            const forceFactor = force * MOUSE_FORCE_STRENGTH / (distMouse + 0.1);
+            let forceFactor = force * MOUSE_FORCE_STRENGTH / (distMouse + 0.1);
+            
+            if (mouseState.isShiftDown) {
+                forceFactor *= -1; // Reverse the force to attract
+            }
+
             vx += dxMouse * forceFactor * 0.01;
             vy += dyMouse * forceFactor * 0.01;
         }
