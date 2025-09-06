@@ -61,14 +61,14 @@ const ProgrammerDayCountdown: React.FC = () => {
 
   if (isToday) {
     return (
-      <div className="text-center text-lg text-emerald-600 font-semibold bg-emerald-100/80 px-4 py-2 rounded-lg shadow mb-8">
+      <div className="text-center text-lg text-[rgb(var(--text-countdown-today))] font-semibold bg-[rgb(var(--background-countdown-today))] px-4 py-2 rounded-lg shadow mb-8">
         🎉 祝你程序员节快乐！ 🎉
       </div>
     );
   }
 
   return (
-    <div className="text-center text-slate-600 bg-white/70 backdrop-blur-sm px-4 py-2 rounded-lg shadow-md mb-8">
+    <div className="text-center text-[rgb(var(--text-tertiary))] bg-[rgb(var(--background-countdown))] backdrop-blur-sm px-4 py-2 rounded-lg shadow-md mb-8">
       <p className="text-xs font-semibold tracking-wider mb-1">程序员节倒计时</p>
       <div className="flex items-baseline justify-center space-x-2">
         <div>

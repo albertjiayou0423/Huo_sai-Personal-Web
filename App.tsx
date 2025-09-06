@@ -2,16 +2,15 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import BackgroundShapes from './components/BackgroundShapes';
 import Confetti from './components/Confetti';
 import ProgrammerDayCountdown from './components/ProgrammerDayCountdown';
-import { CodeIcon, DesignIcon, GithubIcon, MailIcon, ZapIcon, EarthquakeIcon, PartyPopperIcon, ClockIcon } from './components/Icons';
+import { CodeIcon, DesignIcon, GithubIcon, MailIcon, ZapIcon, EarthquakeIcon, PartyPopperIcon, ClockIcon, PaletteIcon } from './components/Icons';
 
-// Define background colors for each section in a map for easy access
-const sectionBackgrounds: { [key: string]: string } = {
-  home: 'bg-slate-100',
-  about: 'bg-teal-50',
-  contact: 'bg-rose-50',
+// Define background colors for each section using CSS variables
+const sectionBgVars: { [key: string]: string } = {
+  home: 'var(--background-home)',
+  about: 'var(--background-about)',
+  contact: 'var(--background-contact)',
 };
 
-// Define the structure of the earthquake data we'll display
 interface EarthquakeInfo {
   hypocenter?: string;
   maxInt?: string;
@@ -22,13 +21,11 @@ interface EarthquakeInfo {
   eventId?: string;
 }
 
-// Define the structure for UI obstacles
 interface Obstacle {
   id: string;
   rect: DOMRect;
 }
 
-// NEW: Define structure for mouse state
 interface MouseState {
   x: number;
   y: number;
@@ -47,21 +44,72 @@ const calculateAge = (birthDate: Date): number => {
 };
 
 const designColors = [
-    { bg: 'bg-blue-100', text: 'text-blue-600' },    // Slate Blue family
-    { bg: 'bg-rose-100', text: 'text-rose-600' },    // Dusty Rose family
-    { bg: 'bg-teal-100', text: 'text-teal-600' },    // Sage Green family
+    { bg: 'bg-blue-100', text: 'text-blue-600' },
+    { bg: 'bg-rose-100', text: 'text-rose-600' },
+    { bg: 'bg-teal-100', text: 'text-teal-600' },
 ];
 
 export default function App() {
-  // State and logic for custom mouse cursor
   const cursorOuterRef = useRef<HTMLDivElement>(null);
   const [isHoveringLink, setIsHoveringLink] = useState(false);
   
-  // NEW: State for mouse position, clicks, and scroll
   const [mouseState, setMouseState] = useState<MouseState>({ x: window.innerWidth / 2, y: window.innerHeight / 2, isLeftDown: false, isRightDown: false });
   const [scrollVelocity, setScrollVelocity] = useState(0);
   const scrollTimeoutRef = useRef<number | null>(null);
   const lastScrollTop = useRef(0);
+
+  // --- NEW: Theme State ---
+  const [theme, setTheme] = useState('light');
+  const [palette, setPalette] = useState('slate');
+  const [isPaletteModalOpen, setIsPaletteModalOpen] = useState(false);
+  const longPressTimer = useRef<number | null>(null);
+  const isLongPress = useRef(false);
+
+  // Load theme from localStorage on initial mount
+  useEffect(() => {
+    const savedTheme = localStorage.getItem('hs-theme') || 'light';
+    const savedPalette = localStorage.getItem('hs-palette') || 'slate';
+    setTheme(savedTheme);
+    setPalette(savedPalette);
+  }, []);
+
+  // Apply theme to DOM and save to localStorage on change
+  useEffect(() => {
+    const root = document.documentElement;
+    if (theme === 'dark') {
+      root.classList.add('dark');
+    } else {
+      root.classList.remove('dark');
+    }
+    localStorage.setItem('hs-theme', theme);
+
+    root.dataset.theme = palette;
+    localStorage.setItem('hs-palette', palette);
+  }, [theme, palette]);
+
+  const palettes = [
+      { id: 'slate', name: '默认', bg: 'bg-slate-200' },
+      { id: 'rose', name: '玫瑰', bg: 'bg-rose-200' },
+      { id: 'teal', name: '青色', bg: 'bg-teal-200' },
+  ];
+
+  const handleThemeButtonMouseDown = () => {
+      isLongPress.current = false;
+      longPressTimer.current = window.setTimeout(() => {
+          isLongPress.current = true;
+          setIsPaletteModalOpen(true);
+      }, 750);
+  };
+
+  const handleThemeButtonMouseUp = () => {
+      if (longPressTimer.current) {
+          clearTimeout(longPressTimer.current);
+      }
+      if (!isLongPress.current) {
+          setTheme(t => (t === 'light' ? 'dark' : 'light'));
+      }
+  };
+
 
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
@@ -111,30 +159,25 @@ export default function App() {
     };
   }, []);
 
-  // State and logic for scroll indicator
   const [hasScrolled, setHasScrolled] = useState(false);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   
-  // State for earthquake modal and data
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [earthquakeData, setEarthquakeData] = useState<EarthquakeInfo | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
-  // State for toast notifications
   const [toastInfo, setToastInfo] = useState<{ id: string; message: string } | null>(null);
   const lastEarthquakeIdRef = useRef<string | null>(null);
 
-  // Effect for polling earthquake data
   useEffect(() => {
     const fetchLatestEarthquake = async () => {
       try {
         const response = await fetch('https://dev.narikakun.net/webapi/earthquake/post_data.json');
-        if (!response.ok) return; // Fail silently
+        if (!response.ok) return;
         const data = await response.json();
         const eventId = data.Head?.EventID;
 
-        // On first fetch, just set the ID without showing a toast
         if (lastEarthquakeIdRef.current === null) {
             lastEarthquakeIdRef.current = eventId;
             return;
@@ -146,17 +189,16 @@ export default function App() {
           setToastInfo({ id: eventId, message });
         }
       } catch (error) {
-        console.error("Error fetching earthquake data:", error); // Log silently
+        console.error("Error fetching earthquake data:", error);
       }
     };
     
-    fetchLatestEarthquake(); // Initial fetch
-    const intervalId = setInterval(fetchLatestEarthquake, 60000); // Poll every 60 seconds
+    fetchLatestEarthquake();
+    const intervalId = setInterval(fetchLatestEarthquake, 60000);
 
     return () => clearInterval(intervalId);
   }, []);
 
-  // Effect for auto-dismissing toasts
   useEffect(() => {
     if (toastInfo) {
       const timer = setTimeout(() => setToastInfo(null), 6000);
@@ -164,22 +206,18 @@ export default function App() {
     }
   }, [toastInfo]);
   
-  // State for card interactions
   const [isGlitched, setIsGlitched] = useState(false);
   const [designColorIndex, setDesignColorIndex] = useState(0);
 
-  // State for confetti celebration
   const [showConfetti, setShowConfetti] = useState(false);
   const [isCooldown, setIsCooldown] = useState(false);
 
-  // State for UI obstacles and their indicators
   const [obstacles, setObstacles] = useState<Obstacle[]>([]);
   const [uiIndicators, setUiIndicators] = useState<Record<string, { style: React.CSSProperties }>>({});
   const mainRef = useRef<HTMLElement>(null);
 
-  // State and logic for circle gesture
   const [generationTrigger, setGenerationTrigger] = useState(0);
-  const [vignetteProgress, setVignetteProgress] = useState(0); // 0 to 1
+  const [vignetteProgress, setVignetteProgress] = useState(0);
   const [showVignette, setShowVignette] = useState(false);
   const gestureRef = useRef({
     points: [] as { x: number; y: number }[],
@@ -188,6 +226,8 @@ export default function App() {
     isActivated: false,
   });
   const progressTimeoutRef = useRef<number | null>(null);
+  
+  const [shapeCount, setShapeCount] = useState(0);
 
   useEffect(() => {
     const handleGesture = (e: MouseEvent) => {
@@ -234,15 +274,15 @@ export default function App() {
       const circles = Math.abs(g.totalAngle) / (2 * Math.PI);
 
       if (!g.isActivated) {
-        if (circles >= 1.5) { // Lowered activation threshold
+        if (circles >= 1.5) {
           g.isActivated = true;
-          g.totalAngle = 0; // Reset angle to count from here for progress
+          g.totalAngle = 0;
         }
       } else {
         setShowVignette(true);
-        const progress = Math.min(1, circles / 1.0); // Progress from 0 to 1 as we go from 1.5 to 2.5 circles
+        const progress = Math.min(1, circles / 1.0);
         setVignetteProgress(progress);
-        if (circles >= 1.0) { // Trigger after 1 more circle (2.5 total)
+        if (circles >= 1.0) {
           setGenerationTrigger(prev => prev + 1);
           g.totalAngle = 0;
           g.points = [];
@@ -394,8 +434,11 @@ export default function App() {
   const age = calculateAge(new Date('2013-01-01'));
 
   return (
-    <main ref={mainRef} className={`relative h-screen text-slate-800 antialiased overflow-hidden transition-colors duration-700 ease-in-out ${sectionBackgrounds[activeSection]}`}>
-      {/* --- Mouse Force Field Visualizer --- */}
+    <main 
+      ref={mainRef} 
+      className="relative h-screen text-[rgb(var(--text-primary))] antialiased overflow-hidden transition-colors duration-700 ease-in-out"
+      style={{ backgroundColor: sectionBgVars[activeSection] }}
+    >
       <div
         className="fixed pointer-events-none z-40 rounded-full border-2 border-dashed transition-all duration-300 ease-out"
         style={{
@@ -405,7 +448,7 @@ export default function App() {
           width: mouseState.isLeftDown ? '300px' : '0px',
           height: mouseState.isLeftDown ? '300px' : '0px',
           opacity: mouseState.isLeftDown ? 0.7 : 0,
-          borderColor: 'rgba(239, 68, 68, 0.5)' // Red for push
+          borderColor: 'rgba(239, 68, 68, 0.5)'
         }}
       />
       
@@ -439,6 +482,8 @@ export default function App() {
         generationTrigger={generationTrigger}
         mouseState={mouseState}
         scrollVelocity={scrollVelocity}
+        onShapeCountChange={setShapeCount}
+        theme={theme as 'light' | 'dark'}
       />
       
       {Object.entries(uiIndicators).map(([id, indicator]) => (
@@ -446,20 +491,20 @@ export default function App() {
       ))}
       
       {toastInfo && (
-        <div className="fixed top-5 right-5 z-50 w-full max-w-sm bg-white/80 backdrop-blur-md rounded-lg shadow-lg pointer-events-auto ring-1 ring-black ring-opacity-5 overflow-hidden animate-toast-in-right">
+        <div className="fixed top-5 right-5 z-50 w-full max-w-sm bg-[rgb(var(--background-card))] backdrop-blur-md rounded-lg shadow-lg pointer-events-auto ring-1 ring-[rgb(var(--ring-primary))] overflow-hidden animate-toast-in-right">
           <div className="p-4">
             <div className="flex items-start">
               <div className="flex-shrink-0 pt-0.5">
                 <EarthquakeIcon className="h-6 w-6 text-blue-600" />
               </div>
               <div className="ml-3 w-0 flex-1">
-                <p className="text-sm font-semibold text-gray-900">新地震情报</p>
-                <p className="mt-1 text-sm text-gray-600">{toastInfo.message}</p>
+                <p className="text-sm font-semibold text-[rgb(var(--text-primary))]">新地震情报</p>
+                <p className="mt-1 text-sm text-[rgb(var(--text-tertiary))]">{toastInfo.message}</p>
               </div>
               <div className="ml-4 flex-shrink-0 flex">
                 <button
                   onClick={() => setToastInfo(null)}
-                  className="inline-flex text-gray-400 rounded-md hover:text-gray-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                  className="inline-flex text-[rgb(var(--text-quaternary))] rounded-md hover:text-[rgb(var(--text-tertiary))] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
                 >
                   <span className="sr-only">Close</span>
                   <svg className="h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
@@ -475,10 +520,8 @@ export default function App() {
       <button
         onClick={handleConfettiClick}
         disabled={isCooldown}
-        className={`fixed bottom-4 left-4 z-20 p-3 bg-white/80 rounded-full shadow-lg backdrop-blur-sm transition-all duration-200 ${
-          isCooldown
-            ? 'opacity-50 cursor-not-allowed'
-            : 'hover:scale-110'
+        className={`fixed bottom-4 left-4 z-40 p-3 bg-[rgb(var(--background-button))] rounded-full shadow-lg backdrop-blur-sm transition-all duration-200 ${
+          isCooldown ? 'opacity-50' : 'hover:scale-110'
         }`}
         aria-label="撒花"
         onMouseEnter={() => !isCooldown && setIsHoveringLink(true)}
@@ -486,30 +529,80 @@ export default function App() {
         data-obstacle="true" data-id="confetti-button"
       >
         {isCooldown ? (
-          <ClockIcon className="w-6 h-6 text-slate-600" />
+          <ClockIcon className="w-6 h-6 text-[rgb(var(--text-tertiary))]" />
         ) : (
           <PartyPopperIcon className="w-6 h-6 text-rose-500" />
         )}
       </button>
+
+      <button
+          className="fixed top-4 right-4 z-40 p-3 bg-[rgb(var(--background-button))] rounded-full shadow-lg backdrop-blur-sm transition-all duration-200 hover:scale-110"
+          aria-label="Toggle Theme"
+          onMouseDown={handleThemeButtonMouseDown}
+          onMouseUp={handleThemeButtonMouseUp}
+          onMouseEnter={() => setIsHoveringLink(true)}
+          onMouseLeave={() => {
+            if (longPressTimer.current) clearTimeout(longPressTimer.current);
+            setIsHoveringLink(false);
+          }}
+          data-obstacle="true" data-id="theme-button"
+        >
+          <PaletteIcon className="w-6 h-6 text-[rgb(var(--text-secondary))]" />
+      </button>
+
+      {isPaletteModalOpen && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/40 animate-fadeIn" onClick={() => setIsPaletteModalOpen(false)}></div>
+          <div className="relative flex flex-col items-center gap-4 bg-[rgb(var(--background-card))] p-6 sm:p-8 rounded-lg border border-[rgb(var(--border-primary))] shadow-lg text-left animate-scaleUp">
+              <h3 className="text-lg font-semibold text-[rgb(var(--text-secondary))]">选择配色</h3>
+              <div className="flex gap-4">
+                  {palettes.map(p => (
+                      <button 
+                          key={p.id}
+                          onClick={() => {
+                              setPalette(p.id);
+                              setIsPaletteModalOpen(false);
+                          }}
+                          onMouseEnter={() => setIsHoveringLink(true)}
+                          onMouseLeave={() => setIsHoveringLink(false)}
+                          className={`flex flex-col items-center gap-2 p-2 rounded-md transition-all ${palette === p.id ? 'ring-2 ring-blue-500' : 'hover:bg-slate-500/10'}`}
+                      >
+                          <div className={`w-10 h-10 rounded-full ${p.bg}`}></div>
+                          <span className="text-sm text-[rgb(var(--text-tertiary))]">{p.name}</span>
+                      </button>
+                  ))}
+              </div>
+          </div>
+        </div>
+      )}
+
+      {shapeCount > 45 && (
+         <div
+            className="fixed bottom-4 right-4 z-[51] flex items-center gap-3 px-4 py-3 bg-[rgb(var(--background-button-refresh))] rounded-full shadow-lg backdrop-blur-md ring-1 ring-[rgb(var(--ring-primary))] transition-all duration-200 animate-slide-up-fade-in pointer-events-none"
+            data-obstacle="true" data-id="refresh-prompt"
+         >
+            <span className="text-sm text-[rgb(var(--text-secondary))] font-medium">是不是有点卡了？刷新一下试试吧</span>
+         </div>
+      )}
 
       <div ref={scrollContainerRef} className="relative z-10 h-screen w-full snap-y snap-mandatory overflow-y-scroll">
         <section ref={homeRef} id="home" className="relative h-screen w-full snap-start flex flex-col items-center justify-center text-center p-4 sm:p-8">
           <div className="absolute top-8 left-1/2 -translate-x-1/2 w-full max-w-md px-4" data-obstacle="true" data-id="countdown">
              <ProgrammerDayCountdown />
           </div>
-          <div className="relative flex flex-col items-center" data-obstacle="true" data-id="hero-title">
+          <div className="relative flex flex-col items-center bg-[rgb(var(--background-frosted))] backdrop-blur-md px-12 py-8" data-obstacle="true" data-id="hero-title">
             <h1 
-              className="text-6xl sm:text-8xl font-bold text-slate-700 tracking-tighter"
+              className="text-6xl sm:text-8xl font-bold text-[rgb(var(--text-secondary))] tracking-tighter"
               onClick={handleTitleClick}
               role="button"
               tabIndex={0}
             >
               Huo_sai
             </h1>
-            <p className="mt-4 text-lg sm:text-xl text-slate-600 tracking-wide">
+            <p className="mt-4 text-lg sm:text-xl text-[rgb(var(--text-tertiary))] tracking-wide">
               初中生 • 编程 • 简洁设计
             </p>
-            <p className="mt-2 text-base text-slate-500">
+            <p className="mt-2 text-base text-[rgb(var(--text-quaternary))]">
               ({age}岁)
             </p>
           </div>
@@ -517,7 +610,7 @@ export default function App() {
             className={`absolute bottom-6 left-1/2 -translate-x-1/2 transition-opacity duration-500 ${hasScrolled ? 'opacity-0' : 'opacity-100'}`}
             aria-hidden="true"
           >
-            <div className="text-slate-500">
+            <div className="text-[rgb(var(--text-quaternary))]">
               <p className="mb-2 text-xs tracking-wider">滚动浏览</p>
               <svg className="w-6 h-6 mx-auto animate-bounce-slow" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 17l-4 4m0 0l-4-4m4 4V3" />
@@ -528,10 +621,10 @@ export default function App() {
 
         <section ref={aboutRef} id="about" className="h-screen w-full snap-start flex flex-col items-center justify-center p-4 sm:p-8">
           <div className="relative w-full max-w-4xl text-center">
-            <h2 className="text-4xl sm:text-5xl font-bold tracking-tight mb-12" data-obstacle="true" data-id="about-title">关于我</h2>
+            <h2 className="text-4xl sm:text-5xl font-bold tracking-tight mb-12 text-[rgb(var(--text-secondary))]" data-obstacle="true" data-id="about-title">关于我</h2>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8 text-left" data-obstacle="true" data-id="about-cards">
               <div
-                className="bg-white p-6 rounded-lg border border-gray-200/50 shadow-sm transition-transform hover:scale-105 duration-300"
+                className="bg-[rgb(var(--background-card))] p-6 rounded-lg border border-[rgb(var(--border-primary))] shadow-sm transition-transform hover:scale-105 duration-300"
                 onClick={handleCodeCardClick} role="button" tabIndex={0}
                 onKeyDown={(e) => e.key === 'Enter' && handleCodeCardClick()}
                 onMouseEnter={() => setIsHoveringLink(true)} onMouseLeave={() => setIsHoveringLink(false)}
@@ -540,12 +633,12 @@ export default function App() {
                   <div className="bg-blue-100 p-3 rounded-full flex-shrink-0">
                     <CodeIcon className="w-6 h-6 text-blue-600" />
                   </div>
-                  <h3 className="text-xl font-semibold">编程</h3>
+                  <h3 className="text-xl font-semibold text-[rgb(var(--text-secondary))]">编程</h3>
                 </div>
-                <p className={`mt-4 text-slate-600 ${isGlitched ? 'animate-glitch' : ''}`}>主修 C++，享受用代码构建逻辑和解决问题的过程。</p>
+                <p className={`mt-4 text-[rgb(var(--text-tertiary))] ${isGlitched ? 'animate-glitch' : ''}`}>主修 C++，享受用代码构建逻辑和解决问题的过程。</p>
               </div>
               <div 
-                className="bg-white p-6 rounded-lg border border-gray-200/50 shadow-sm transition-transform hover:scale-105 duration-300"
+                className="bg-[rgb(var(--background-card))] p-6 rounded-lg border border-[rgb(var(--border-primary))] shadow-sm transition-transform hover:scale-105 duration-300"
                 onClick={handleEewCardClick} role="button" tabIndex={0}
                 onKeyDown={(e) => e.key === 'Enter' && handleEewCardClick()}
                 onMouseEnter={() => setIsHoveringLink(true)} onMouseLeave={() => setIsHoveringLink(false)}
@@ -554,12 +647,12 @@ export default function App() {
                   <div className="bg-red-100 p-3 rounded-full flex-shrink-0">
                     <ZapIcon className="w-6 h-6 text-red-600" />
                   </div>
-                  <h3 className="text-xl font-semibold">EEW</h3>
+                  <h3 className="text-xl font-semibold text-[rgb(var(--text-secondary))]">EEW</h3>
                 </div>
-                <p className="mt-4 text-slate-600">对 EEW (紧急地震速报) 抱有浓厚兴趣，关注防灾减灾技术。</p>
+                <p className="mt-4 text-[rgb(var(--text-tertiary))]">对 EEW (紧急地震速报) 抱有浓厚兴趣，关注防灾减灾技术。</p>
               </div>
               <div
-                className="bg-white p-6 rounded-lg border border-gray-200/50 shadow-sm transition-transform hover:scale-105 duration-300"
+                className="bg-[rgb(var(--background-card))] p-6 rounded-lg border border-[rgb(var(--border-primary))] shadow-sm transition-transform hover:scale-105 duration-300"
                 onClick={handleDesignCardClick} role="button" tabIndex={0}
                 onKeyDown={(e) => e.key === 'Enter' && handleDesignCardClick()}
                 onMouseEnter={() => setIsHoveringLink(true)} onMouseLeave={() => setIsHoveringLink(false)}
@@ -568,9 +661,9 @@ export default function App() {
                   <div className={`p-3 rounded-full flex-shrink-0 transition-colors duration-300 ${designColors[designColorIndex].bg}`}>
                     <DesignIcon className={`w-6 h-6 transition-colors duration-300 ${designColors[designColorIndex].text}`} />
                   </div>
-                  <h3 className="text-xl font-semibold">设计</h3>
+                  <h3 className="text-xl font-semibold text-[rgb(var(--text-secondary))]">设计</h3>
                 </div>
-                <p className="mt-4 text-slate-600">热爱简洁、明快的设计风格，相信“少即是多”。</p>
+                <p className="mt-4 text-[rgb(var(--text-tertiary))]">热爱简洁、明快的设计风格，相信“少即是多”。</p>
               </div>
             </div>
           </div>
@@ -578,11 +671,11 @@ export default function App() {
         
         <section ref={contactRef} id="contact" className="h-screen w-full snap-start flex flex-col items-center justify-center p-4 sm:p-8">
            <div className="relative w-full max-w-4xl text-center">
-            <h2 className="text-4xl sm:text-5xl font-bold tracking-tight mb-10" data-obstacle="true" data-id="contact-title">联系我</h2>
+            <h2 className="text-4xl sm:text-5xl font-bold tracking-tight mb-10 text-[rgb(var(--text-secondary))]" data-obstacle="true" data-id="contact-title">联系我</h2>
              <div className="flex flex-col sm:flex-row items-center justify-center gap-6 sm:gap-10" data-obstacle="true" data-id="contact-links">
                 <a 
                   href="mailto:albert.tang_1a@hotmail.com"
-                  className="flex items-center gap-3 text-slate-700 hover:text-blue-500 transition-colors duration-300 group"
+                  className="flex items-center gap-3 text-[rgb(var(--text-secondary))] hover:text-[rgb(var(--text-link-hover))] transition-colors duration-300 group"
                   onMouseEnter={() => setIsHoveringLink(true)}
                   onMouseLeave={() => setIsHoveringLink(false)}
                 >
@@ -592,7 +685,7 @@ export default function App() {
                 <a 
                   href="https://github.com/albertjiayou0423" 
                   target="_blank" rel="noopener noreferrer" 
-                  className="flex items-center gap-3 text-slate-700 hover:text-green-600 transition-colors duration-300 group"
+                  className="flex items-center gap-3 text-[rgb(var(--text-secondary))] hover:text-[rgb(var(--text-link-gh-hover))] transition-colors duration-300 group"
                   onMouseEnter={() => setIsHoveringLink(true)}
                   onMouseLeave={() => setIsHoveringLink(false)}
                   >
@@ -607,28 +700,28 @@ export default function App() {
       {isModalOpen && (
         <div className="fixed inset-0 z-40 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/40 animate-fadeIn" onClick={() => setIsModalOpen(false)}></div>
-          <div className="relative w-full max-w-2xl bg-white p-6 sm:p-8 rounded-lg border border-gray-200/50 shadow-lg text-left animate-scaleUp">
+          <div className="relative w-full max-w-2xl bg-[rgb(var(--background-card))] p-6 sm:p-8 rounded-lg border border-[rgb(var(--border-primary))] shadow-lg text-left animate-scaleUp">
              <button
               onClick={() => setIsModalOpen(false)}
-              className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 transition-colors"
+              className="absolute top-4 right-4 text-[rgb(var(--text-quaternary))] hover:text-[rgb(var(--text-tertiary))] transition-colors"
               aria-label="关闭"
             >
               <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>
-            <h2 className="text-3xl sm:text-4xl font-bold tracking-tight mb-6 text-center">最新JMA地震情报</h2>
-              {isLoading && <p className="text-slate-600 text-center">正在加载最新地震情报...</p>}
+            <h2 className="text-3xl sm:text-4xl font-bold tracking-tight mb-6 text-center text-[rgb(var(--text-secondary))]">最新JMA地震情报</h2>
+              {isLoading && <p className="text-[rgb(var(--text-tertiary))] text-center">正在加载最新地震情报...</p>}
               {error && <p className="text-red-600 text-center">加载失败: {error}</p>}
               {earthquakeData && (
                 <div>
-                  <div className="flex items-start gap-4 mb-4 pb-4 border-b">
+                  <div className="flex items-start gap-4 mb-4 pb-4 border-b border-[rgb(var(--border-primary))]">
                      <div className="bg-blue-100 p-3 rounded-full flex-shrink-0 mt-1">
                         <EarthquakeIcon className="w-7 h-7 text-blue-600" />
                      </div>
                      <div>
-                       <h3 className="text-2xl font-bold">{earthquakeData.hypocenter}</h3>
-                       <p className="text-sm text-slate-500">
+                       <h3 className="text-2xl font-bold text-[rgb(var(--text-secondary))]">{earthquakeData.hypocenter}</h3>
+                       <p className="text-sm text-[rgb(var(--text-quaternary))]">
                         发布时间: {
                           earthquakeData.originTime && earthquakeData.originTime !== 'N/A'
                           ? new Date(earthquakeData.originTime).toLocaleString('zh-CN', {
@@ -642,25 +735,26 @@ export default function App() {
                   </div>
                   <div className="grid grid-cols-2 gap-x-6 gap-y-4 text-lg">
                     <div className="flex items-center gap-3">
-                      <span className="font-semibold text-slate-500 w-16 text-right">震级:</span>
-                      <span className="font-bold">{earthquakeData.magnitude}</span>
+                      <span className="font-semibold text-[rgb(var(--text-quaternary))] w-16 text-right">震级:</span>
+                      <span className="font-bold text-[rgb(var(--text-tertiary))]">{earthquakeData.magnitude}</span>
                     </div>
                     <div className="flex items-center gap-3">
-                      <span className="font-semibold text-slate-500 w-16 text-right">深度:</span>
-                      <span className="font-bold">{earthquakeData.depth}</span>
+                      <span className="font-semibold text-[rgb(var(--text-quaternary))] w-16 text-right">深度:</span>
+                      <span className="font-bold text-[rgb(var(--text-tertiary))]">{earthquakeData.depth}</span>
                     </div>
                      <div className="flex items-center gap-3">
-                      <span className="font-semibold text-slate-500 w-16 text-right">最大震度:</span>
+                      <span className="font-semibold text-[rgb(var(--text-quaternary))] w-16 text-right">最大震度:</span>
                       <span className="font-bold text-red-600">{earthquakeData.maxInt}</span>
                     </div>
                      <div className="flex items-center gap-3">
-                      <span className="font-semibold text-slate-500 w-16 text-right">EventID:</span>
-                      <span className="font-mono text-sm">{earthquakeData.eventId}</span>
+                      <span className="font-semibold text-[rgb(var(--text-quaternary))] w-16 text-right">EventID:</span>
+                      <span className="font-mono text-sm text-[rgb(var(--text-tertiary))]">{earthquakeData.eventId}</span>
                     </div>
                     <div className="col-span-2 flex items-start gap-3 mt-2">
-                      <span className="font-semibold text-slate-500 w-16 text-right shrink-0">海啸信息:</span>
-                      <span className="font-bold">{earthquakeData.tsunamiInfo}</span>
+                      <span className="font-semibold text-[rgb(var(--text-quaternary))] w-16 text-right shrink-0">海啸信息:</span>
+                      <span className="font-bold text-[rgb(var(--text-tertiary))]">{earthquakeData.tsunamiInfo}</span>
                     </div>
+
                   </div>
                 </div>
               )}

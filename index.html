@@ -10,26 +10,97 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,100..800;1,100..800&display=swap" rel="stylesheet">
   <style>
-    /* Ensure the body takes full height and hides its own scrollbar */
+    /* --- NEW: Theme Variable System --- */
+    :root {
+      --background-primary: 244 245 247; /* stone-100 */
+      --background-home: 241 245 249;    /* slate-100 */
+      --background-about: 240 253 250;   /* teal-50 */
+      --background-contact: 254 242 242; /* rose-50 */
+      --background-card: 255 255 255;
+      --background-frosted: 224 242 254 / 0.3; /* sky-100/30 */
+      --background-button: 255 255 255 / 0.8;
+      --background-button-refresh: 255 255 255 / 0.6;
+      --background-countdown: 255 255 255 / 0.7;
+      --background-countdown-today: 236 252 241 / 0.8; /* emerald-100/80 */
+
+      --text-primary: 30 41 59;        /* slate-800 */
+      --text-secondary: 51 65 85;     /* slate-700 */
+      --text-tertiary: 71 85 105;      /* slate-600 */
+      --text-quaternary: 100 116 139;  /* slate-500 */
+      --text-countdown-today: 6 95 70; /* emerald-600 */
+      --text-link-hover: 59 130 246;    /* blue-500 */
+      --text-link-gh-hover: 22 163 74; /* green-600 */
+
+      --border-primary: 229 231 235;   /* gray-200/50 */
+      --ring-primary: 0 0 0 / 0.05;
+    }
+
+    .dark {
+      --background-primary: 30 41 59;      /* slate-800 */
+      --background-home: 15 23 42;         /* slate-900 */
+      --background-about: 20 37 37;        /* dark teal */
+      --background-contact: 45 26 26;      /* dark rose */
+      --background-card: 30 41 59;         /* slate-800 */
+      --background-frosted: 14 116 144 / 0.2; /* cyan-700/20 */
+      --background-button: 51 65 85 / 0.8;
+      --background-button-refresh: 51 65 85 / 0.6;
+      --background-countdown: 51 65 85 / 0.7;
+      --background-countdown-today: 16 75 45 / 0.8;
+
+      --text-primary: 226 232 240;      /* slate-200 */
+      --text-secondary: 203 213 225;     /* slate-300 */
+      --text-tertiary: 148 163 184;      /* slate-400 */
+      --text-quaternary: 100 116 139;  /* slate-500 */
+      --text-countdown-today: 110 231 183; /* emerald-300 */
+      --text-link-hover: 96 165 250;    /* blue-400 */
+      --text-link-gh-hover: 74 222 128; /* green-400 */
+
+      --border-primary: 71 85 105 / 0.5; /* slate-600/50 */
+      --ring-primary: 255 255 255 / 0.1;
+    }
+
+    [data-theme="rose"] {
+      --background-primary: 254 242 242;
+      --background-home: 254 226 226;
+      --background-about: 253 232 232;
+      --background-contact: 254 242 242;
+      --background-frosted: 251 146 146 / 0.2;
+    }
+
+    [data-theme="teal"] {
+      --background-primary: 240 253 250;
+      --background-home: 204 251 241;
+      --background-about: 240 253 250;
+      --background-contact: 232 252 252;
+      --background-frosted: 74 222 128 / 0.2;
+    }
+    
+    [data-theme="slate"] {
+      --background-primary: 241 245 249;
+      --background-home: 226 232 240;
+      --background-about: 241 245 249;
+      --background-contact: 226 232 240;
+      --background-frosted: 148 163 184 / 0.2;
+    }
+
     html, body {
       height: 100%;
       overflow: hidden;
-      scroll-behavior: smooth; /* Optional: for smoother scrolling between sections */
-      font-family: 'JetBrains Mono', monospace; /* Set monospace font globally */
-      user-select: none; /* --- Disable text selection --- */
-      -webkit-user-select: none; /* For Safari */
-      -moz-user-select: none; /* For Firefox */
+      scroll-behavior: smooth;
+      font-family: 'JetBrains Mono', monospace;
+      user-select: none;
+      -webkit-user-select: none;
+      -moz-user-select: none;
     }
-    /* Hide default cursor to show the custom one */
     body {
       cursor: none;
+      background-color: rgb(var(--background-primary));
+      transition: background-color 0.7s ease-in-out;
     }
-    /* Force hide system cursor on interactive elements */
     a, button, [role="button"] {
       cursor: none !important;
     }
     
-    /* A bounce animation for the scroll indicator */
     @keyframes bounce {
       0%, 100% {
         transform: translateY(-25%);
@@ -43,7 +114,6 @@
     .animate-bounce-slow {
       animation: bounce 1.5s infinite;
     }
-    /* Animations for the modal */
     @keyframes fadeIn {
       from { opacity: 0; }
       to { opacity: 1; }
@@ -59,7 +129,6 @@
       animation: scaleUp 0.3s ease-out forwards;
     }
     
-    /* Animation for the programming card text glitch */
     @keyframes glitch {
       0% { transform: translate(0); opacity: 1; }
       20% { transform: translate(-2px, 2px); opacity: 0.8; text-shadow: 1px 1px 0 red; }
@@ -72,7 +141,6 @@
       animation: glitch 0.3s cubic-bezier(.25,.46,.45,.94) both;
     }
 
-    /* --- Collision Indicator General Animations --- */
     @keyframes pulse-indicator-opacity {
         0%, 100% { opacity: 0.7; }
         50% { opacity: 1; }
@@ -82,7 +150,6 @@
         50% { background-color: rgba(252, 165, 165, 0.8); }
     }
     
-    /* --- NEW V2: Glow Indicator Styles (Robust Implementation) --- */
     .glow-indicator {
       position: absolute;
       top: 0; left: 0;
@@ -91,7 +158,7 @@
       opacity: 0;
       transition: opacity 0.2s ease-in-out;
       will-change: opacity;
-      border-radius: inherit; /* Crucial for matching shape */
+      border-radius: inherit;
     }
     .glow-indicator.visible {
       opacity: 1;
@@ -123,10 +190,9 @@
       --current-color: var(--avoiding-color);
     }
 
-    /* Indicator for UI elements (segment style) */
     .ui-indicator-segment {
       position: fixed;
-      background-color: rgba(252, 165, 165, 0.7); /* Softer red */
+      background-color: rgba(252, 165, 165, 0.7);
       border-radius: 2px;
       pointer-events: none;
       opacity: 0;
@@ -135,7 +201,6 @@
       animation: pulse-red-bg-soft 1.5s infinite;
     }
 
-    /* --- NEW: Internal Arrow Style --- */
     .internal-arrow {
       position: absolute;
       top: 50%;
@@ -149,7 +214,6 @@
       opacity: 0.7;
     }
 
-    /* Styles for the full-screen vignette progress indicator */
     .vignette-progress {
       position: fixed;
       top: 0;
@@ -158,7 +222,7 @@
       height: 100%;
       pointer-events: none;
       z-index: 50;
-      box-shadow: inset 0 0 var(--vignette-size, 200px) 50px rgba(110, 142, 170, 0.3); /* slate blue with opacity */
+      box-shadow: inset 0 0 var(--vignette-size, 200px) 50px rgba(110, 142, 170, 0.3);
       opacity: 0;
       transition: opacity 0.3s ease-out, box-shadow 0.1s linear;
     }
@@ -166,7 +230,6 @@
       opacity: 1;
     }
 
-    /* --- NEW: Toast Notification Animation --- */
     @keyframes toast-in-right {
       from {
         transform: translateX(100%);
@@ -181,7 +244,6 @@
       animation: toast-in-right 0.5s cubic-bezier(0.21, 1.02, 0.73, 1) forwards;
     }
 
-    /* --- NEW: Trajectory Path Dot Style --- */
     .path-dot {
       position: absolute;
       border-radius: 50%;
@@ -190,7 +252,6 @@
       will-change: transform, opacity;
     }
 
-    /* --- NEW: Orientation Dot Style & Animations --- */
     @keyframes pulse-dot {
       0%, 100% { transform: scale(1); }
       50% { transform: scale(1.2); }
@@ -218,6 +279,10 @@
       animation: pulse-dot 1.5s infinite;
     }
     
+    .orientation-dot.dot-seen {
+      background-color: #64748b; /* slate-500 */
+    }
+
     .orientation-dot.dot-accelerating {
       background-color: #f59e0b; /* amber-500 */
       animation: pulse-dot 1s infinite;
@@ -227,20 +292,32 @@
       transform: scale(1.8);
     }
 
-    /* --- NEW: Constellation Line Style --- */
     .constellation-line {
       stroke-width: 1px;
       transition: opacity 0.3s ease-in-out;
       pointer-events: none;
     }
     
-    /* --- NEW: Angle Selector Animation --- */
     @keyframes spin-slow {
       from { transform: rotate(0deg); }
       to { transform: rotate(360deg); }
     }
     .animate-spin-slow {
       animation: spin-slow 10s linear infinite;
+    }
+    
+    @keyframes slide-up-fade-in {
+        from {
+            opacity: 0;
+            transform: translateY(20px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+    .animate-slide-up-fade-in {
+        animation: slide-up-fade-in 0.5s ease-out forwards;
     }
 
   </style>
@@ -254,7 +331,7 @@
 }
 </script>
 </head>
-<body class="bg-stone-100">
+<body>
   <div id="root"></div>
   <script type="module" src="/index.tsx"></script>
 </body>
