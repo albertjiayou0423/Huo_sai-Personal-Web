@@ -234,14 +234,15 @@ export default function App() {
       const circles = Math.abs(g.totalAngle) / (2 * Math.PI);
 
       if (!g.isActivated) {
-        if (circles >= 2) {
+        if (circles >= 1.5) { // Lowered activation threshold
           g.isActivated = true;
-          g.totalAngle = 0;
+          g.totalAngle = 0; // Reset angle to count from here for progress
         }
       } else {
         setShowVignette(true);
-        setVignetteProgress(circles / 3);
-        if (circles >= 3) {
+        const progress = Math.min(1, circles / 1.0); // Progress from 0 to 1 as we go from 1.5 to 2.5 circles
+        setVignetteProgress(progress);
+        if (circles >= 1.0) { // Trigger after 1 more circle (2.5 total)
           setGenerationTrigger(prev => prev + 1);
           g.totalAngle = 0;
           g.points = [];
@@ -401,10 +402,10 @@ export default function App() {
           left: mouseState.x,
           top: mouseState.y,
           transform: 'translate(-50%, -50%)',
-          width: (mouseState.isLeftDown || mouseState.isRightDown) ? '300px' : '0px',
-          height: (mouseState.isLeftDown || mouseState.isRightDown) ? '300px' : '0px',
-          opacity: (mouseState.isLeftDown || mouseState.isRightDown) ? 1 : 0,
-          borderColor: mouseState.isRightDown ? 'rgba(59, 130, 246, 0.5)' : 'rgba(239, 68, 68, 0.5)' // Blue for pull, Red for push
+          width: mouseState.isLeftDown ? '300px' : '0px',
+          height: mouseState.isLeftDown ? '300px' : '0px',
+          opacity: mouseState.isLeftDown ? 0.7 : 0,
+          borderColor: 'rgba(239, 68, 68, 0.5)' // Red for push
         }}
       />
       

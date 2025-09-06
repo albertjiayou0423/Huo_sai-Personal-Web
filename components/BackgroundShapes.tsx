@@ -69,18 +69,17 @@ const colorSchemes: ColorScheme[] = [
 ];
 const shapeTypes: ShapeType[] = ['circle', 'rounded-square'];
 const NUM_SHAPES = 8;
-const PREDICTION_FRAMES = 90;
-const EVASION_COOLDOWN_FRAMES = 180;
-const NEAR_MISS_BUFFER = 75;
-const EVASION_TEST_FRAMES = 120;
+const PREDICTION_FRAMES = 100;
+const EVASION_COOLDOWN_FRAMES = 120;
+const EVASION_TEST_FRAMES = 60; // How "soon" a collision must be to trigger evasion
 const ANIMATION_DURATION = 30;
 const MOUSE_FORCE_STRENGTH = 150;
 const FLOCKING_STRENGTH = 0.0005;
 const CONSTELLATION_DISTANCE = 350;
-const IMMINENT_COLLISION_DISTANCE_FACTOR = 1.5;
 const ACCELERATION_BOOST = 1.5;
 const GENERATION_COUNT = 4;
 const GENERATION_RADIUS = 60;
+const MIN_SPEED_FACTOR = 0.2;
 
 // --- HELPER FUNCTIONS ---
 const getAngle = (vx: number, vy: number) => (Math.atan2(vy, vx) * 180) / Math.PI;
@@ -172,10 +171,7 @@ const BackgroundShapes: React.FC<BackgroundShapesProps> = ({ obstacles, onUiColl
   const [isDraggingAngle, setIsDraggingAngle] = useState(false);
   
   const shapesRef = useRef<Shape[]>([]);
-  const elementsRef = useRef<Map<number, HTMLDivElement>>(new Map());
   const animationFrameId = useRef<number | null>(null);
-  const svgRef = useRef<SVGSVGElement>(null);
-  const linePoolRef = useRef<SVGLineElement[]>([]);
   const dragStartAngleRef = useRef(0);
   const shapeStartAngleRef = useRef(0);
 
@@ -193,9 +189,10 @@ const BackgroundShapes: React.FC<BackgroundShapesProps> = ({ obstacles, onUiColl
             const newShapes: Shape[] = [];
             let lastId = (prevShapes.length > 0 ? Math.max(...prevShapes.map(s => s.id)) : -1);
             for (let i = 0; i < GENERATION_COUNT; i++) {
-                const angle = (Math.PI / 2) * i + Math.random() * (Math.PI / 2) + Math.PI / 4;
-                const x = mouseState.x + Math.cos(angle) * GENERATION_RADIUS;
-                const y = mouseState.y + Math.sin(angle) * GENERATION_RADIUS;
+                const angle = (Math.PI / 2) * i + Math.random() * (Math.PI / 2);
+                const quadrantAngle = angle + (Math.PI / 4) * (Math.random() - 0.5);
+                const x = mouseState.x + Math.cos(quadrantAngle) * GENERATION_RADIUS;
+                const y = mouseState.y + Math.sin(quadrantAngle) * GENERATION_RADIUS;
                 newShapes.push(createNewShape(++lastId, x, y));
             }
             return [...prevShapes, ...newShapes];
@@ -212,11 +209,7 @@ const BackgroundShapes: React.FC<BackgroundShapesProps> = ({ obstacles, onUiColl
     if (e.button === 2) { // Right click
       e.preventDefault();
       e.stopPropagation();
-      if (selectedShapeId === id) {
-        setSelectedShapeId(null);
-      } else {
-        setSelectedShapeId(id);
-      }
+      setSelectedShapeId(prevId => (prevId === id ? null : id));
       setIsDraggingAngle(false);
     }
   };
@@ -236,20 +229,15 @@ const BackgroundShapes: React.FC<BackgroundShapesProps> = ({ obstacles, onUiColl
   useEffect(() => {
     const handleAngleDragMove = (e: MouseEvent) => {
       if (!isDraggingAngle || selectedShapeId === null) return;
-      
       const selectedShape = shapesRef.current.find(s => s.id === selectedShapeId);
-      if (!selectedShape) return; // CRASH FIX: Ensure shape exists
+      if (!selectedShape) return;
 
       const currentAngle = Math.atan2(e.clientY - selectedShape.y, e.clientX - selectedShape.x) * (180 / Math.PI);
       const angleDelta = findShortestAngle(currentAngle - dragStartAngleRef.current);
-      let newTargetRotation = shapeStartAngleRef.current + angleDelta;
-      
-      selectedShape.targetRotation = newTargetRotation;
+      selectedShape.targetRotation = shapeStartAngleRef.current + angleDelta;
     };
     
-    const handleAngleDragEnd = () => {
-        setIsDraggingAngle(false);
-    };
+    const handleAngleDragEnd = () => setIsDraggingAngle(false);
     
     window.addEventListener('mousemove', handleAngleDragMove);
     window.addEventListener('mouseup', handleAngleDragEnd);
@@ -270,7 +258,6 @@ const BackgroundShapes: React.FC<BackgroundShapesProps> = ({ obstacles, onUiColl
       const bounds = { width: window.innerWidth, height: window.innerHeight };
       const padding = 100;
       
-      // CRASH FIX: If selected shape disappears, reset state
       if (selectedShapeId !== null && !allShapes.some(s => s.id === selectedShapeId)) {
         setSelectedShapeId(null);
         setIsDraggingAngle(false);
@@ -282,40 +269,26 @@ const BackgroundShapes: React.FC<BackgroundShapesProps> = ({ obstacles, onUiColl
           const progress = 1 - (shape.animationCounter / ANIMATION_DURATION);
           shape.scale = progress * progress;
           shape.opacity = progress;
-          if (shape.animationCounter <= 0) {
-            shape.animationState = 'active';
-          }
+          if (shape.animationCounter <= 0) shape.animationState = 'active';
         }
 
-        // --- Physics & Movement ---
-        let { x, y, vx, vy, speed, baseSpeed } = shape;
+        let { vx, vy, speed, baseSpeed } = shape;
         
-        // Apply scroll velocity
         vy += scrollVelocity * 0.05;
         
-        // Mouse interaction
-        const dxMouse = x - mouseState.x;
-        const dyMouse = y - mouseState.y;
+        const dxMouse = shape.x - mouseState.x;
+        const dyMouse = shape.y - mouseState.y;
         const distMouseSq = dxMouse * dxMouse + dyMouse * dyMouse;
         const mouseRadius = 150;
-        const mouseRadiusSq = mouseRadius * mouseRadius;
 
-        if (distMouseSq < mouseRadiusSq) {
-          const distMouse = Math.sqrt(distMouseSq);
-          const force = 1 - (distMouse / mouseRadius);
-          const forceFactor = force * MOUSE_FORCE_STRENGTH / (distMouse + 0.1);
-          if (mouseState.isLeftDown) {
-            // Left click PUSHES, but does not alter target rotation
+        if (mouseState.isLeftDown && distMouseSq < mouseRadius * mouseRadius) {
+            const distMouse = Math.sqrt(distMouseSq);
+            const force = 1 - (distMouse / mouseRadius);
+            const forceFactor = force * MOUSE_FORCE_STRENGTH / (distMouse + 0.1);
             vx += dxMouse * forceFactor * 0.01;
             vy += dyMouse * forceFactor * 0.01;
-          } else if (mouseState.isRightDown) {
-            // Right click PULLS
-            vx -= dxMouse * forceFactor * 0.01;
-            vy -= dyMouse * forceFactor * 0.01;
-          }
         }
         
-        // Flocking behavior
         let avg_vx = 0, avg_vy = 0, neighbor_count = 0;
         for (const other of allShapes) {
             if (shape.id === other.id) continue;
@@ -333,26 +306,22 @@ const BackgroundShapes: React.FC<BackgroundShapesProps> = ({ obstacles, onUiColl
             vy += (avg_vy - vy) * FLOCKING_STRENGTH * neighbor_count;
         }
 
-        // Apply forces to get new speed and direction
         shape.vx = vx;
         shape.vy = vy;
         speed = Math.sqrt(vx * vx + vy * vy);
         
-        // --- Speed Regulation ---
         let targetSpeed = baseSpeed;
         if (shape.evasionTactic === 'accelerate') {
             targetSpeed *= ACCELERATION_BOOST;
         }
-        // Smoothly return to target speed
-        speed += (targetSpeed - speed) * 0.05;
-        const minSpeed = baseSpeed * 0.2;
+        speed += (targetSpeed - speed) * 0.05; // Smoothly return to target speed
+        const minSpeed = baseSpeed * MIN_SPEED_FACTOR;
         if (speed < minSpeed) speed = minSpeed;
 
-        // --- Rotation & Orientation ---
         if (shape.id !== selectedShapeId || !isDraggingAngle) {
             const desiredRotation = getAngle(vx, vy);
             const rotationDiff = findShortestAngle(desiredRotation - shape.targetRotation);
-            shape.targetRotation += rotationDiff * 0.05; // Gradually align with velocity
+            shape.targetRotation += rotationDiff * 0.05;
         }
         
         const turnRate = shape.personality === 'agile' ? 0.2 : 0.1;
@@ -365,15 +334,94 @@ const BackgroundShapes: React.FC<BackgroundShapesProps> = ({ obstacles, onUiColl
         shape.vy = Math.sin(rad) * speed;
         shape.speed = speed;
 
-        // Final position update
+        // --- Collision Detection & Avoidance (REWORKED) ---
+        if (shape.evasionCooldownFrames > 0) shape.evasionCooldownFrames--;
+
+        let potentialCollision: { time: number; id: number | string; angle: number; isUi: boolean; rect?: DOMRect } | null = null;
+        
+        // Only check for new collisions if the shape is not on a cooldown period.
+        if (shape.evasionCooldownFrames <= 0) {
+            // Reset state before each check.
+            shape.collisionState = 'none';
+            shape.evasionTactic = 'none';
+            
+            const myPath = Array.from({ length: PREDICTION_FRAMES }, (_, i) => ({
+                x: shape.x + shape.vx * i,
+                y: shape.y + shape.vy * i,
+            }));
+
+            // Check against other shapes
+            for (const other of allShapes) {
+                if (shape.id === other.id) continue;
+                for (let i = 0; i < PREDICTION_FRAMES; i++) {
+                    const otherX = other.x + other.vx * i;
+                    const otherY = other.y + other.vy * i;
+                    const distSq = (myPath[i].x - otherX)**2 + (myPath[i].y - otherY)**2;
+                    const combinedRadius = (shape.size + other.size) / 2;
+                    if (distSq < combinedRadius**2) {
+                        const angleToOther = getAngle(other.x - shape.x, other.y - shape.y);
+                        if (!potentialCollision || i < potentialCollision.time) {
+                            potentialCollision = { time: i, id: other.id, angle: angleToOther, isUi: false };
+                        }
+                        break;
+                    }
+                }
+            }
+            
+            // Check against UI obstacles
+            for (const obs of obstacles) {
+                const rect = obs.rect;
+                for (let i = 0; i < PREDICTION_FRAMES; i++) {
+                    const p = myPath[i];
+                    const halfSize = shape.size / 2;
+                    if (p.x + halfSize > rect.left && p.x - halfSize < rect.right && p.y + halfSize > rect.top && p.y - halfSize < rect.bottom) {
+                        const angleToObs = getAngle(rect.left + rect.width / 2 - shape.x, rect.top + rect.height / 2 - shape.y);
+                        if (!potentialCollision || i < potentialCollision.time) {
+                            potentialCollision = { time: i, id: obs.id, angle: angleToObs, isUi: true, rect };
+                        }
+                        break;
+                    }
+                }
+            }
+
+            if (potentialCollision) {
+                shape.collisionState = 'warning';
+                shape.indicatorAngle = potentialCollision.angle;
+                
+                if (potentialCollision.time < EVASION_TEST_FRAMES) {
+                    shape.collisionState = 'avoiding';
+                    shape.evasionCooldownFrames = EVASION_COOLDOWN_FRAMES;
+                    if (potentialCollision.isUi && potentialCollision.rect) {
+                        onUiCollision(potentialCollision.id as string, potentialCollision.angle, potentialCollision.rect);
+                    }
+                    
+                    const angleToThreat = potentialCollision.angle;
+                    const diff = findShortestAngle(angleToThreat - shape.currentRotation);
+                    
+                    if (shape.personality === 'fast' && Math.abs(diff) > 135) {
+                        shape.evasionTactic = 'accelerate';
+                        shape.avoidanceAngle = 0;
+                    } else {
+                        shape.evasionTactic = 'turn';
+                        const turnDirection = diff > 0 ? -1 : 1;
+                        const turnAmount = shape.personality === 'agile' ? 90 : 60;
+                        shape.avoidanceAngle = turnDirection * turnAmount;
+                        shape.targetRotation = shape.currentRotation + shape.avoidanceAngle;
+                    }
+                }
+            }
+        } else {
+             // If on cooldown, maintain the 'avoiding' state visually.
+             shape.collisionState = 'avoiding';
+        }
+
         shape.x += shape.vx;
         shape.y += shape.vy;
         
-        // --- Collision Detection & Avoidance ---
-        // (omitted for brevity, assume collision logic is here)
+        const isOutOfBounds = shape.x < -padding || shape.x > bounds.width + padding || shape.y < -padding || shape.y > bounds.height + padding;
+        const isInvalid = !isFinite(shape.x) || !isFinite(shape.y);
 
-        // --- Boundary Check & Respawn ---
-        if (x < -padding || x > bounds.width + padding || y < -padding || y > bounds.height + padding) {
+        if (isOutOfBounds || isInvalid) {
              if (shape.id === selectedShapeId) {
                 setSelectedShapeId(null);
                 setIsDraggingAngle(false);
@@ -389,18 +437,12 @@ const BackgroundShapes: React.FC<BackgroundShapesProps> = ({ obstacles, onUiColl
     animationFrameId.current = requestAnimationFrame(animate);
 
     return () => {
-      if (animationFrameId.current) {
-        cancelAnimationFrame(animationFrameId.current);
-      }
+      if (animationFrameId.current) cancelAnimationFrame(animationFrameId.current);
     };
-  }, [scrollVelocity, mouseState, obstacles, onUiCollision, selectedShapeId, isDraggingAngle]); // Re-run effect if dependencies change
+  }, [scrollVelocity, mouseState, obstacles, onUiCollision, selectedShapeId, isDraggingAngle]);
   
-
   return (
     <div className="fixed top-0 left-0 w-full h-full pointer-events-none z-0">
-      <svg ref={svgRef} className="absolute w-full h-full">
-        {/* Lines will be managed here */}
-      </svg>
       {shapes.map((shape) => {
         const isSelected = shape.id === selectedShapeId;
         const style: React.CSSProperties = {
@@ -419,26 +461,45 @@ const BackgroundShapes: React.FC<BackgroundShapesProps> = ({ obstacles, onUiColl
         };
 
         if (isSelected) {
-            // Use box-shadow instead of drop-shadow to avoid affecting child elements
             style.boxShadow = '0 10px 25px -5px rgba(0, 0, 0, 0.2), 0 8px 10px -6px rgba(0, 0, 0, 0.2)';
-            style.transform += ' translateY(-10px)'; // Lift effect
+            style.transform += ' translateY(-10px)';
         }
 
         return (
           <div
             key={shape.id}
-            ref={(el) => { if (el) elementsRef.current.set(shape.id, el); else elementsRef.current.delete(shape.id); }}
             style={style}
             className={shape.type === 'circle' ? 'rounded-full' : 'rounded-lg'}
             onMouseDown={(e) => handleShapeMouseDown(e, shape.id)}
             onContextMenu={(e) => e.preventDefault()}
           >
             <div
-              className={`orientation-dot`}
+              className={`orientation-dot ${
+                shape.collisionState === 'warning' ? 'dot-warning' : ''
+              } ${
+                shape.collisionState === 'avoiding' ? 'dot-avoiding' : ''
+              } ${
+                shape.evasionTactic === 'accelerate' ? 'dot-accelerating' : ''
+              }`}
               style={{'--dot-color': shape.color.stroke} as React.CSSProperties}
             />
             <div className="internal-arrow" style={{'--arrow-color': shape.color.stroke} as React.CSSProperties} />
             
+            <div
+              className={`collision-indicator ${shape.collisionState === 'avoiding' ? 'indicator-avoiding' : ''}`}
+              style={{
+                transform: `translate(-50%, -50%) rotate(${shape.indicatorAngle - shape.rotation}deg)`,
+                opacity: (shape.collisionState === 'warning' || shape.collisionState === 'avoiding') ? 1 : 0,
+              }}
+            >
+              <div 
+                className="indicator-arc" 
+                style={{ borderRadius: shape.type === 'circle' ? '50%' : '11.2px' /* 8px (rounded-lg) * 1.4 (scale) */ }}
+              >
+                <div className="indicator-arrow" style={{ transform: `translateX(-50%) rotate(${shape.avoidanceAngle}deg)` }} />
+              </div>
+            </div>
+
             {isSelected && (
               <div className="absolute w-full h-full top-0 left-0 flex items-center justify-center">
                   <div 
