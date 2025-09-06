@@ -67,7 +67,6 @@ interface BackgroundShapesProps {
   onUiCollision: (id: string, angle: number, rect: DOMRect) => void;
   generationTrigger: number;
   mouseState: MouseState;
-  scrollVelocity: number;
   onShapeCountChange: (count: number) => void;
 }
 
@@ -231,7 +230,7 @@ const createInitialShapes = (bounds: { width: number; height: number }): Shape[]
 };
 
 // --- REACT COMPONENT ---
-const BackgroundShapes: React.FC<BackgroundShapesProps> = ({ obstacles, onUiCollision, generationTrigger, mouseState, scrollVelocity, onShapeCountChange }) => {
+const BackgroundShapes: React.FC<BackgroundShapesProps> = ({ obstacles, onUiCollision, generationTrigger, mouseState, onShapeCountChange }) => {
   const [shapes, setShapes] = useState<Shape[]>([]);
   const [selectedShapeId, setSelectedShapeId] = useState<number | null>(null);
   const [isDraggingAngle, setIsDraggingAngle] = useState(false);
@@ -375,8 +374,6 @@ const BackgroundShapes: React.FC<BackgroundShapesProps> = ({ obstacles, onUiColl
         }
 
         let { vx, vy, speed, baseSpeed } = shape;
-        
-        vy += scrollVelocity * 0.05;
         
         const dxMouse = shape.x - mouseState.x;
         const dyMouse = shape.y - mouseState.y;
@@ -597,10 +594,10 @@ const BackgroundShapes: React.FC<BackgroundShapesProps> = ({ obstacles, onUiColl
     return () => {
       if (animationFrameId.current) cancelAnimationFrame(animationFrameId.current);
     };
-  }, [scrollVelocity, mouseState, obstacles, onUiCollision, selectedShapeId, isDraggingAngle]);
+  }, [mouseState, obstacles, onUiCollision, selectedShapeId, isDraggingAngle]);
   
   return (
-    <div className="fixed top-0 left-0 w-full h-full pointer-events-none z-0">
+    <div className="fixed top-0 left-0 w-full h-full pointer-events-none z-10">
       {shapes.map((shape) => {
         const isSelected = shape.id === selectedShapeId;
         const borderRadius = shape.type === 'circle' ? '50%' : '0.5rem';

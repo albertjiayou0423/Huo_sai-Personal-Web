@@ -8,6 +8,7 @@ import { CodeIcon, DesignIcon, GithubIcon, MailIcon, ZapIcon, EarthquakeIcon, Pa
 const sectionBgVars: { [key: string]: string } = {
   home: 'var(--background-home)',
   about: 'var(--background-about)',
+  timeline: 'var(--background-timeline)',
   contact: 'var(--background-contact)',
 };
 
@@ -75,11 +76,7 @@ export default function App() {
   const [isHoveringLink, setIsHoveringLink] = useState(false);
   
   const [mouseState, setMouseState] = useState<MouseState>({ x: window.innerWidth / 2, y: window.innerHeight / 2, isLeftDown: false, isRightDown: false });
-  const [scrollVelocity, setScrollVelocity] = useState(0);
-  const scrollTimeoutRef = useRef<number | null>(null);
-  const lastScrollTop = useRef(0);
-
-  // --- REWORKED: Theme State (Background Only) ---
+  
   const [palette, setPalette] = useState('slate');
   const [isPaletteModalOpen, setIsPaletteModalOpen] = useState(false);
   const [isCustomColorModalOpen, setIsCustomColorModalOpen] = useState(false);
@@ -100,11 +97,11 @@ export default function App() {
     root.style.setProperty('--background-primary', primaryRgb);
     root.style.setProperty('--background-home', homeRgb);
     root.style.setProperty('--background-about', primaryRgb);
-    root.style.setProperty('--background-contact', homeRgb);
+    root.style.setProperty('--background-timeline', homeRgb);
+    root.style.setProperty('--background-contact', primaryRgb);
     root.style.setProperty('--background-frosted', `${frostedRgb} / 0.2`);
   }, []);
 
-  // Load theme from localStorage on initial mount
   useEffect(() => {
     const savedPalette = localStorage.getItem('hs-palette') || 'slate';
     setPalette(savedPalette);
@@ -118,7 +115,6 @@ export default function App() {
     }
   }, [setCustomPalette]);
 
-  // Apply theme to DOM and save to localStorage on change
   useEffect(() => {
     const root = document.documentElement;
     if (palette === 'custom') {
@@ -130,6 +126,7 @@ export default function App() {
       root.style.removeProperty('--background-primary');
       root.style.removeProperty('--background-home');
       root.style.removeProperty('--background-about');
+      root.style.removeProperty('--background-timeline');
       root.style.removeProperty('--background-contact');
       root.style.removeProperty('--background-frosted');
     }
@@ -173,7 +170,6 @@ export default function App() {
     };
     const handleContextMenu = (e: MouseEvent) => e.preventDefault();
     
-    // --- NEW: Fix for stuck cursor ---
     const handleBlur = () => {
         setMouseState(prev => ({ ...prev, isLeftDown: false, isRightDown: false }));
     };
@@ -186,19 +182,14 @@ export default function App() {
 
 
     const container = scrollContainerRef.current;
+    
     const handleScroll = () => {
-        if (!container) return;
-        const scrollTop = container.scrollTop;
-        const velocity = scrollTop - lastScrollTop.current;
-        lastScrollTop.current = scrollTop;
-        setScrollVelocity(velocity);
-
-        if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current);
-        scrollTimeoutRef.current = window.setTimeout(() => setScrollVelocity(0), 100);
-
-        if (container.scrollTop > 10) setHasScrolled(true);
+      if (container && container.scrollTop > 10) {
+          setHasScrolled(true);
+      }
     };
-    container?.addEventListener('scroll', handleScroll, { passive: true });
+
+    container?.addEventListener('scroll', handleScroll);
 
     return () => {
         window.removeEventListener('mousemove', handleMouseMove);
@@ -207,7 +198,6 @@ export default function App() {
         window.removeEventListener('contextmenu', handleContextMenu);
         window.removeEventListener('blur', handleBlur);
         container?.removeEventListener('scroll', handleScroll);
-        if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current);
     };
   }, []);
 
@@ -452,10 +442,11 @@ export default function App() {
   const [activeSection, setActiveSection] = useState('home');
   const homeRef = useRef<HTMLElement>(null);
   const aboutRef = useRef<HTMLElement>(null);
+  const timelineRef = useRef<HTMLElement>(null);
   const contactRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
-    const sections = [homeRef.current, aboutRef.current, contactRef.current];
+    const sections = [homeRef.current, aboutRef.current, timelineRef.current, contactRef.current];
     const observer = new IntersectionObserver(
       (entries) => {
         entries.forEach((entry) => { if (entry.isIntersecting) { setActiveSection(entry.target.id ?? 'home'); } });
@@ -508,13 +499,23 @@ export default function App() {
         description: "按住鼠标左键会产生一个排斥力场，将周围的形状推开。"
     }
   ];
+  
+  const timelineData = [
+      { year: '2022', text: '开始学习编程 (Scratch)', color: 'bg-orange-400' },
+      { year: '2023', text: '学习 Python', color: 'bg-sky-400' },
+      { year: '2024-2025', text: '专心学习 C++', color: 'bg-blue-500' },
+  ];
 
   return (
     <main 
       ref={mainRef} 
-      className="relative h-screen text-[rgb(var(--text-primary))] antialiased overflow-hidden transition-colors duration-700 ease-in-out"
-      style={{ backgroundColor: `rgb(${sectionBgVars[activeSection]})` }}
+      className="relative h-screen text-[rgb(var(--text-primary))] antialiased overflow-hidden"
     >
+      <div 
+        className="fixed inset-0 z-0 transition-colors duration-700 ease-in-out"
+        style={{ backgroundColor: `rgb(${sectionBgVars[activeSection]})` }}
+      />
+
       <div
         className="fixed pointer-events-none z-40 rounded-full border-2 border-dashed transition-all duration-300 ease-out"
         style={{
@@ -551,13 +552,16 @@ export default function App() {
       />
       
       {showConfetti && <Confetti onAnimationEnd={onAnimationEnd} />}
+
+      <div className="fixed top-4 left-1/2 -translate-x-1/2 w-full max-w-md px-4 pointer-events-auto z-30" data-obstacle="true" data-id="countdown">
+         <ProgrammerDayCountdown />
+      </div>
       
       <BackgroundShapes 
         obstacles={obstacles} 
         onUiCollision={handleUiCollision} 
         generationTrigger={generationTrigger}
         mouseState={mouseState}
-        scrollVelocity={scrollVelocity}
         onShapeCountChange={setShapeCount}
       />
       
@@ -735,12 +739,9 @@ export default function App() {
          </div>
       )}
 
-      <div ref={scrollContainerRef} className="relative z-10 h-screen w-full snap-y snap-mandatory overflow-y-scroll">
-        <section ref={homeRef} id="home" className="relative h-screen w-full snap-start flex flex-col items-center justify-center text-center p-4 sm:p-8 pointer-events-none">
-          <div className="absolute top-8 left-1/2 -translate-x-1/2 w-full max-w-md px-4 pointer-events-auto" data-obstacle="true" data-id="countdown">
-             <ProgrammerDayCountdown />
-          </div>
-          <div className="relative flex flex-col items-center bg-[rgb(var(--background-frosted))] backdrop-blur-md px-12 py-8 pointer-events-auto" data-obstacle="true" data-id="hero-title">
+      <div ref={scrollContainerRef} className="relative z-20 h-screen w-full snap-y snap-mandatory overflow-y-scroll">
+        <section ref={homeRef} id="home" className="relative h-screen w-full snap-start flex flex-col items-center justify-center text-center p-4 sm:p-8">
+          <div className="relative flex flex-col items-center bg-[rgb(var(--background-frosted))] backdrop-blur-md px-12 py-8 pointer-events-auto relative z-30" data-obstacle="true" data-id="hero-title">
             <h1 
               className="text-6xl sm:text-8xl font-bold text-[rgb(var(--text-secondary))] tracking-tighter"
               onClick={handleTitleClick}
@@ -757,7 +758,7 @@ export default function App() {
             </p>
           </div>
           <div
-            className={`absolute bottom-6 left-1/2 -translate-x-1/2 transition-opacity duration-500 ${hasScrolled ? 'opacity-0' : 'opacity-100'}`}
+            className={`absolute bottom-6 left-1/2 -translate-x-1/2 transition-opacity duration-500 pointer-events-auto z-30 ${hasScrolled ? 'opacity-0' : ''}`}
             aria-hidden="true"
           >
             <div className="text-[rgb(var(--text-quaternary))]">
@@ -769,8 +770,8 @@ export default function App() {
           </div>
         </section>
 
-        <section ref={aboutRef} id="about" className="h-screen w-full snap-start flex flex-col items-center justify-center p-4 sm:p-8 pointer-events-none">
-          <div className="relative w-full max-w-4xl text-center pointer-events-auto">
+        <section ref={aboutRef} id="about" className="h-screen w-full snap-start flex flex-col items-center justify-center p-4 sm:p-8">
+          <div className="relative w-full max-w-4xl text-center pointer-events-auto z-30">
             <h2 className="text-4xl sm:text-5xl font-bold tracking-tight mb-12 text-[rgb(var(--text-secondary))]" data-obstacle="true" data-id="about-title">关于我</h2>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8 text-left" data-obstacle="true" data-id="about-cards">
               <div
@@ -818,99 +819,102 @@ export default function App() {
             </div>
           </div>
         </section>
-        
-        <section ref={contactRef} id="contact" className="h-screen w-full snap-start flex flex-col items-center justify-center p-4 sm:p-8 pointer-events-none">
-           <div className="relative w-full max-w-4xl text-center pointer-events-auto">
-            <h2 className="text-4xl sm:text-5xl font-bold tracking-tight mb-10 text-[rgb(var(--text-secondary))]" data-obstacle="true" data-id="contact-title">联系我</h2>
-             <div className="flex flex-col sm:flex-row items-center justify-center gap-6 sm:gap-10" data-obstacle="true" data-id="contact-links">
-                <a 
-                  href="mailto:albert.tang_1a@hotmail.com"
-                  className="flex items-center gap-3 text-[rgb(var(--text-secondary))] hover:text-[rgb(var(--text-link-hover))] transition-colors duration-300 group"
-                  onMouseEnter={() => setIsHoveringLink(true)}
-                  onMouseLeave={() => setIsHoveringLink(false)}
-                >
-                  <MailIcon className="w-7 h-7" />
-                  <span className="text-lg group-hover:underline">albert.tang_1a@hotmail.com</span>
-                </a>
-                <a 
-                  href="https://github.com/albertjiayou0423" 
-                  target="_blank" rel="noopener noreferrer" 
-                  className="flex items-center gap-3 text-[rgb(var(--text-secondary))] hover:text-[rgb(var(--text-link-gh-hover))] transition-colors duration-300 group"
-                  onMouseEnter={() => setIsHoveringLink(true)}
-                  onMouseLeave={() => setIsHoveringLink(false)}
-                  >
-                  <GithubIcon className="w-7 h-7" />
-                  <span className="text-lg group-hover:underline">albertjiayou0423</span>
-                </a>
-             </div>
-           </div>
-        </section>
-      </div>
-      
-      {isModalOpen && (
-        <div className="fixed inset-0 z-40 flex items-center justify-center p-4 pointer-events-auto">
-          <div className="absolute inset-0 bg-black/40 animate-fadeIn" onClick={() => setIsModalOpen(false)}></div>
-          <div className="relative w-full max-w-2xl bg-[rgb(var(--background-card))] p-6 sm:p-8 rounded-lg border border-[rgb(var(--border-primary))] shadow-lg text-left animate-scaleUp">
-             <button
-              onClick={() => setIsModalOpen(false)}
-              className="absolute top-4 right-4 text-[rgb(var(--text-quaternary))] hover:text-[rgb(var(--text-tertiary))] transition-colors"
-              aria-label="关闭"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-            <h2 className="text-3xl sm:text-4xl font-bold tracking-tight mb-6 text-center text-[rgb(var(--text-secondary))]">最新JMA地震情报</h2>
-              {isLoading && <p className="text-[rgb(var(--text-tertiary))] text-center">正在加载最新地震情报...</p>}
-              {error && <p className="text-red-600 text-center">加载失败: {error}</p>}
-              {earthquakeData && (
-                <div>
-                  <div className="flex items-start gap-4 mb-4 pb-4 border-b border-[rgb(var(--border-primary))]">
-                     <div className="bg-blue-100 p-3 rounded-full flex-shrink-0 mt-1">
-                        <EarthquakeIcon className="w-7 h-7 text-blue-600" />
-                     </div>
-                     <div>
-                       <h3 className="text-2xl font-bold text-[rgb(var(--text-secondary))]">{earthquakeData.hypocenter}</h3>
-                       <p className="text-sm text-[rgb(var(--text-quaternary))]">
-                        发布时间: {
-                          earthquakeData.originTime && earthquakeData.originTime !== 'N/A'
-                          ? new Date(earthquakeData.originTime).toLocaleString('zh-CN', {
-                              year: 'numeric', month: '2-digit', day: '2-digit',
-                              hour: '2-digit', minute: '2-digit', second: '2-digit'
-                            })
-                          : 'N/A'
-                        }
-                       </p>
-                     </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-x-6 gap-y-4 text-lg">
-                    <div className="flex items-center gap-3">
-                      <span className="font-semibold text-[rgb(var(--text-quaternary))] w-16 text-right">震级:</span>
-                      <span className="font-bold text-[rgb(var(--text-tertiary))]">{earthquakeData.magnitude}</span>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <span className="font-semibold text-[rgb(var(--text-quaternary))] w-16 text-right">深度:</span>
-                      <span className="font-bold text-[rgb(var(--text-tertiary))]">{earthquakeData.depth}</span>
-                    </div>
-                     <div className="flex items-center gap-3">
-                      <span className="font-semibold text-[rgb(var(--text-quaternary))] w-16 text-right">最大震度:</span>
-                      <span className="font-bold text-red-600">{earthquakeData.maxInt}</span>
-                    </div>
-                     <div className="flex items-center gap-3">
-                      <span className="font-semibold text-[rgb(var(--text-quaternary))] w-16 text-right">EventID:</span>
-                      <span className="font-mono text-sm text-[rgb(var(--text-tertiary))]">{earthquakeData.eventId}</span>
-                    </div>
-                    <div className="col-span-2 flex items-start gap-3 mt-2">
-                      <span className="font-semibold text-[rgb(var(--text-quaternary))] w-16 text-right shrink-0">海啸信息:</span>
-                      <span className="font-bold text-[rgb(var(--text-tertiary))]">{earthquakeData.tsunamiInfo}</span>
-                    </div>
 
+        <section ref={timelineRef} id="timeline" className="h-screen w-full snap-start flex flex-col items-center justify-center p-4 sm:p-8">
+          <div className="relative w-full max-w-4xl text-center pointer-events-auto z-30">
+            <h2 className="text-4xl sm:text-5xl font-bold tracking-tight mb-16 text-[rgb(var(--text-secondary))]" data-obstacle="true" data-id="timeline-title">
+              编程之旅
+            </h2>
+            <div className="relative w-full max-w-3xl mx-auto" data-obstacle="true" data-id="timeline-cards">
+              <div className="absolute left-4 md:left-1/2 top-2 h-full w-0.5 bg-slate-300 -translate-x-1/2" />
+              {timelineData.map((item, index) => (
+                <div key={index} className={`relative flex items-center mb-12 ${index % 2 === 0 ? 'md:flex-row-reverse' : 'md:flex-row'}`}>
+                  <div className={`w-full md:w-5/12 ${index % 2 === 0 ? 'md:text-right' : 'md:text-left'}`}>
+                    <div className="bg-[rgb(var(--background-card))] p-5 rounded-lg border border-[rgb(var(--border-primary))] shadow-sm ml-12 md:ml-0">
+                      <h3 className="font-bold text-lg text-[rgb(var(--text-secondary))]">{item.year}</h3>
+                      <p className="text-sm text-[rgb(var(--text-tertiary))] mt-1">{item.text}</p>
+                    </div>
+                  </div>
+                  <div className="absolute left-4 md:left-1/2 z-10 flex items-center justify-center w-8 h-8 rounded-full -translate-x-1/2 ring-4 ring-white">
+                    <div className={`w-full h-full rounded-full ${item.color}`} />
                   </div>
                 </div>
-              )}
+              ))}
+            </div>
           </div>
-        </div>
-      )}
+        </section>
+        
+        <section ref={contactRef} id="contact" className="h-screen w-full snap-start flex flex-col items-center justify-center p-4 sm:p-8">
+          <div className="relative w-full max-w-4xl text-center pointer-events-auto z-30">
+            <h2 className="text-4xl sm:text-5xl font-bold tracking-tight mb-8 text-[rgb(var(--text-secondary))]" data-obstacle="true" data-id="contact-title">联系我</h2>
+            <div className="flex justify-center items-center gap-8" data-obstacle="true" data-id="contact-links">
+              <a href="mailto:albert.tang_1a@hotmail.com" className="group" onMouseEnter={() => setIsHoveringLink(true)} onMouseLeave={() => setIsHoveringLink(false)}>
+                <div className="flex flex-col items-center gap-2">
+                  <MailIcon className="w-10 h-10 text-[rgb(var(--text-quaternary))] group-hover:text-[rgb(var(--text-link-hover))] transition-colors" />
+                  <span className="text-[rgb(var(--text-tertiary))] group-hover:text-[rgb(var(--text-link-hover))] transition-colors">邮箱</span>
+                  <p className="text-sm text-[rgb(var(--text-quaternary))] mt-1">albert.tang_1a@hotmail.com</p>
+                </div>
+              </a>
+              <a href="https://github.com/albertjiayou0423" target="_blank" rel="noopener noreferrer" className="group" onMouseEnter={() => setIsHoveringLink(true)} onMouseLeave={() => setIsHoveringLink(false)}>
+                 <div className="flex flex-col items-center gap-2">
+                  <GithubIcon className="w-10 h-10 text-[rgb(var(--text-quaternary))] group-hover:text-[rgb(var(--text-link-gh-hover))] transition-colors" />
+                  <span className="text-[rgb(var(--text-tertiary))] group-hover:text-[rgb(var(--text-link-gh-hover))] transition-colors">GitHub</span>
+                  <p className="text-sm text-[rgb(var(--text-quaternary))] mt-1">albertjiayou0423</p>
+                </div>
+              </a>
+            </div>
+          </div>
+        </section>
+
+        {isModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-auto">
+            <div className="absolute inset-0 bg-black/50 animate-fadeIn" onClick={() => setIsModalOpen(false)}></div>
+            <div className="relative bg-[rgb(var(--background-card))] rounded-lg shadow-xl w-full max-w-md text-left overflow-hidden animate-scaleUp">
+                <div className="bg-blue-500 text-white p-4 flex justify-between items-center">
+                    <div className="flex items-center gap-3">
+                        <ZapIcon className="w-6 h-6" />
+                        <h3 className="text-lg font-semibold">最新地震情报</h3>
+                    </div>
+                </div>
+                <div className="p-6">
+                    {isLoading && <p className="text-[rgb(var(--text-tertiary))]">加载中...</p>}
+                    {error && <p className="text-red-500">错误: {error}</p>}
+                    {earthquakeData && (
+                        <div>
+                            <div className="grid grid-cols-2 gap-4 mb-6 text-center">
+                                <div>
+                                    <p className="text-sm text-[rgb(var(--text-quaternary))]">最大震度</p>
+                                    <p className="text-5xl font-bold text-[rgb(var(--text-primary))]">{earthquakeData.maxInt || 'N/A'}</p>
+                                </div>
+                                <div>
+                                    <p className="text-sm text-[rgb(var(--text-quaternary))]">震级</p>
+                                    <p className="text-5xl font-bold text-[rgb(var(--text-primary))]">{earthquakeData.magnitude ? `M${earthquakeData.magnitude}` : 'N/A'}</p>
+                                </div>
+                            </div>
+                            <ul className="space-y-2 text-sm text-[rgb(var(--text-secondary))] border-t border-[rgb(var(--border-primary))] pt-4">
+                                <li><strong>震源地:</strong> {earthquakeData.hypocenter}</li>
+                                <li><strong>深度:</strong> {earthquakeData.depth}</li>
+                                <li><strong>发生时间:</strong> {earthquakeData.originTime}</li>
+                                <li><strong>海啸情报:</strong> {earthquakeData.tsunamiInfo}</li>
+                                <li className="text-xs text-[rgb(var(--text-quaternary))] pt-2">Event ID: {earthquakeData.eventId}</li>
+                            </ul>
+                        </div>
+                    )}
+                </div>
+                <div className="px-6 pb-6 text-right">
+                    <button
+                        type="button"
+                        className="inline-flex justify-center rounded-md border border-transparent bg-blue-100 px-4 py-2 text-sm font-medium text-blue-900 hover:bg-blue-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+                        onClick={() => setIsModalOpen(false)}
+                        onMouseEnter={() => setIsHoveringLink(true)} onMouseLeave={() => setIsHoveringLink(false)}
+                    >
+                        关闭
+                    </button>
+                </div>
+            </div>
+          </div>
+        )}
+      </div>
     </main>
   );
 }
