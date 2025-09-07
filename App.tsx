@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import BackgroundShapes from './components/BackgroundShapes';
 import Confetti from './components/Confetti';
 import ProgrammerDayCountdown from './components/ProgrammerDayCountdown';
-import { CodeIcon, DesignIcon, GithubIcon, MailIcon, ZapIcon, EarthquakeIcon, PartyPopperIcon, ClockIcon, PaletteIcon, HelpIcon, SparklesIcon, CircleArrowIcon, MoveIcon, MouseClickIcon, MagnetIcon } from './components/Icons';
+import { CodeIcon, DesignIcon, GithubIcon, MailIcon, ZapIcon, EarthquakeIcon, PartyPopperIcon, ClockIcon, PaletteIcon, HelpIcon, SparklesIcon, CircleArrowIcon, MoveIcon, MouseClickIcon, MagnetIcon, ConstellationIcon, TimelineIcon } from './components/Icons';
 import { useDailyGreeting } from './hooks/useDailyGreeting';
 
 
@@ -29,6 +29,7 @@ interface EarthquakeInfo {
   isFinal?: boolean;
   isCancel?: boolean;
   tsunamiInfo?: string; // JMA specific
+  intensityLabel?: string; // --- NEW: Centralized label logic
 }
 
 interface Obstacle {
@@ -180,11 +181,13 @@ export default function App() {
     setIsCustomColorModalOpen(false);
   };
 
-  // --- NEW: Idle Detection ---
   const [isIdle, setIsIdle] = useState(false);
   const idleTimerRef = useRef<number | null>(null);
+  const [welcomeBackMessage, setWelcomeBackMessage] = useState<string | null>(null);
 
   useEffect(() => {
+    const IDLE_TIMEOUT = 120000; // 2 minutes
+
     const handleMouseMove = (e: MouseEvent) => {
       if (cursorOuterRef.current) {
         cursorOuterRef.current.style.left = `${e.clientX}px`;
@@ -192,16 +195,21 @@ export default function App() {
       }
       setMouseState(prev => ({ ...prev, x: e.clientX, y: e.clientY }));
 
-      // --- NEW: Reset idle timer on mouse move ---
       if (idleTimerRef.current) {
           clearTimeout(idleTimerRef.current);
       }
+
       if (isIdle) {
           setIsIdle(false);
+          setWelcomeBackMessage('欢迎回来～');
+          setTimeout(() => {
+              setWelcomeBackMessage(null);
+          }, 3000);
       }
+
       idleTimerRef.current = window.setTimeout(() => {
           setIsIdle(true);
-      }, 3000); // 3 seconds of inactivity
+      }, IDLE_TIMEOUT);
     };
 
     const handleMouseDown = (e: MouseEvent) => {
@@ -350,34 +358,31 @@ export default function App() {
   const [eewRippleKey, setEewRippleKey] = useState(0);
 
   // --- REWORKED & FIXED: Unified EEW Parser (more robust) ---
-  const parseEewData = useCallback((data: any): EarthquakeInfo | null => {
+  const parseEewData = useCallback((data: any, sourceIdentifier: string): EarthquakeInfo | null => {
     try {
-      // 1. Filter out invalid packets like heartbeats or empty objects
       if (!data || typeof data !== 'object' || Object.keys(data).length === 0 || data.type === 'heartbeat') {
         return null;
       }
-
-      // 2. A report is considered potentially valid if it has an EventID or a Hypocenter.
+  
       const eventId = data.EventID;
       const hypocenter = data.Hypocenter ?? data.HypoCenter;
       
-      // If it has neither of these, it's not a useful/valid alert.
       if (!eventId && !hypocenter) {
         return null;
       }
       
       const magnitude = data.Magunitude ?? data.Magnitude;
       
-      let sourceName = '';
-      switch(data.type) {
+      let sourceName = '未知来源';
+      switch(sourceIdentifier) {
         case 'jma_eew': sourceName = '日本气象厅 (JMA)'; break;
         case 'sc_eew': sourceName = '四川省地震局'; break;
         case 'cenc_eew': sourceName = '中国地震台网中心 (CENC)'; break;
         case 'fj_eew': sourceName = '福建省地震局'; break;
-        default: sourceName = '未知来源';
       }
-
-      // 4. Return the best-effort parsed object.
+  
+      const intensityLabel = sourceIdentifier === 'jma_eew' ? '最大震度' : '最大烈度';
+  
       return {
         source: sourceName,
         hypocenter: hypocenter,
@@ -390,6 +395,7 @@ export default function App() {
         isFinal: data.isFinal,
         isCancel: data.isCancel,
         tsunamiInfo: data.Title?.includes('津波') ? '有' : '无',
+        intensityLabel: intensityLabel,
       };
     } catch (e) {
       console.error("Error parsing EEW data:", e, data);
@@ -411,8 +417,8 @@ export default function App() {
         const requests = eewSources.map(source => 
             fetch(`https://api.wolfx.jp/${source.name}.json`)
                 .then(res => res.ok ? res.json() : Promise.reject(`Failed to fetch ${source.name}`))
-                .then(data => ({ ...data, tz: source.tz }))
-                .catch(error => null) // Return null on error to not break Promise.all
+                .then(jsonData => ({ jsonData, sourceName: source.name, tz: source.tz }))
+                .catch(error => null)
         );
 
         const results = await Promise.all(requests);
@@ -420,24 +426,20 @@ export default function App() {
         const now = Date.now();
         const threeMinutesAgo = now - (3 * 60 * 1000);
 
-        for (const data of results) {
-            if (data) {
-                const parsedData = parseEewData(data);
+        for (const result of results) {
+            if (result) {
+                const parsedData = parseEewData(result.jsonData, result.sourceName);
                 
                 if (parsedData?.eventId && parsedData.reportTime) {
-                    // Check if this is a new event
                     if (lastEventIdRef.current[parsedData.source] !== parsedData.eventId) {
-                        const reportDate = parseEewTime(parsedData.reportTime, data.tz);
+                        const reportDate = parseEewTime(parsedData.reportTime, result.tz);
                         
-                        // Check if it's recent (within 3 minutes)
                         if (reportDate && reportDate.getTime() > threeMinutesAgo) {
                             lastEventIdRef.current[parsedData.source] = parsedData.eventId;
                             
-                            // Trigger alert: set toast AND modal
-                            const message = `${parsedData.hypocenter || 'N/A'} M${parsedData.magnitude || '?'} 最大烈度: ${parsedData.maxInt || 'N/A'}`;
+                            const message = `${parsedData.hypocenter || 'N/A'} M${parsedData.magnitude || '?'} ${parsedData.intensityLabel}: ${parsedData.maxInt || 'N/A'}`;
                             setToastInfo({ id: parsedData.eventId, message, source: parsedData.source });
                             
-                             // --- NEW: Trigger ripple effect ---
                             setEewRippleKey(prev => prev + 1);
                             
                             setEarthquakeData(parsedData);
@@ -631,11 +633,10 @@ export default function App() {
       if (!response.ok) throw new Error('网络响应错误，请稍后重试。');
       const data = await response.json();
       
-      const parsedData = parseEewData(data);
-       // FIX: Handle "no report" gracefully instead of showing an error.
+      const parsedData = parseEewData(data, `${source}_eew`);
       if (!parsedData) {
         setError("当前无最新地震速报。");
-        setEarthquakeData(null); // Explicitly clear data
+        setEarthquakeData(null);
         return;
       }
 
@@ -725,6 +726,16 @@ export default function App() {
         icon: <PaletteIcon className="w-8 h-8 text-emerald-500" />,
         title: "主题切换",
         description: "点击右上角的调色盘图标，可以自由切换网站的背景配色方案，包括自定义颜色。"
+    },
+    {
+        icon: <ConstellationIcon className="w-8 h-8 text-teal-500" />,
+        title: "智能聚集",
+        description: "当鼠标静止2分钟后，相同颜色的形状会像家人一样，慢慢聚集在一起。"
+    },
+    {
+        icon: <TimelineIcon className="w-8 h-8 text-indigo-500" />,
+        title: "时间线互动",
+        description: "浏览“编程之旅”时，将鼠标悬停在任意时间点上，背景会变成该主题的颜色。"
     }
   ];
   
@@ -956,7 +967,7 @@ export default function App() {
                     </svg>
                 </button>
                 <h2 className="text-2xl font-bold tracking-tight mb-6 text-center text-[rgb(var(--text-secondary))]">隐藏功能说明</h2>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                     {hiddenFeatures.map((feature, index) => (
                         <div key={index} className="bg-slate-400/10 p-4 rounded-lg flex flex-col items-center text-center backdrop-blur-sm">
                             <div className="flex-shrink-0 mb-3">{feature.icon}</div>
@@ -990,7 +1001,7 @@ export default function App() {
               Huo_sai
             </h1>
             <p className="mt-4 text-lg sm:text-xl text-[rgb(var(--text-tertiary))] tracking-wide">
-              {dailyGreeting}
+              {welcomeBackMessage || dailyGreeting}
             </p>
             <p className="mt-2 text-base text-[rgb(var(--text-quaternary))]">
               ({age}岁)
@@ -1124,13 +1135,13 @@ export default function App() {
                 </div>
                 <div className="p-6">
                     {isLoading && <p className="text-[rgb(var(--text-tertiary))]">加载中...</p>}
-                    {/* FIX: Use a neutral text color for the error/info message */}
                     {error && <p className="text-[rgb(var(--text-tertiary))]">{error}</p>}
                     {earthquakeData && (
                         <div>
                             <div className="grid grid-cols-2 gap-4 mb-6 text-center">
                                 <div>
-                                    <p className="text-sm text-[rgb(var(--text-quaternary))]">最大烈度</p>
+                                    {/* --- MODIFIED: Use the correct intensityLabel from data --- */}
+                                    <p className="text-sm text-[rgb(var(--text-quaternary))]">{earthquakeData.intensityLabel || '最大烈度'}</p>
                                     <p className="text-5xl font-bold text-[rgb(var(--text-primary))]">{earthquakeData.maxInt || 'N/A'}</p>
                                 </div>
                                 <div>

@@ -103,3 +103,22 @@ export const MagnetIcon: React.FC<IconProps> = ({ className }) => (
       <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 2.25v3M15.75 2.25v3" />
   </svg>
 );
+
+export const ConstellationIcon: React.FC<IconProps> = ({ className }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+        <path d="M9 11.25a1.25 1.25 0 100-2.5 1.25 1.25 0 000 2.5z" fill="currentColor" />
+        <path d="M15 5.25a1.25 1.25 0 100-2.5 1.25 1.25 0 000 2.5z" fill="currentColor" />
+        <path d="M15 19.25a1.25 1.25 0 100-2.5 1.25 1.25 0 000 2.5z" fill="currentColor" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M15 5.25L9 11.25l6 8" />
+    </svg>
+);
+
+export const TimelineIcon: React.FC<IconProps> = ({ className }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v18" />
+        <path d="M12 6.75a.75.75 0 100-1.5.75.75 0 000 1.5z" fill="currentColor" />
+        <path d="M12 12.75a.75.75 0 100-1.5.75.75 0 000 1.5z" fill="currentColor" />
+        <path d="M12 18.75a.75.75 0 100-1.5.75.75 0 000 1.5z" fill="currentColor" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M7 12h10" />
+    </svg>
+);

@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+
+import React, 'react';
 
 // --- TYPE DEFINITIONS ---
 type ShapeType = 'circle' | 'rounded-square';
@@ -74,8 +75,12 @@ interface Shape {
   escapeVector: { x: number; y: number } | null;
   stuckWithObstacleId: string | number | null;
   
-  // --- NEW: For color transitions ---
+  // For color transitions
   currentColorRgb: { fill: RgbColor, stroke: RgbColor };
+  
+  // --- NEW: For hand-holding mechanism ---
+  pairedWith: number | null;
+  isPairLeader: boolean;
 }
 
 interface BackgroundShapesProps {
@@ -114,6 +119,7 @@ const MAX_SHAPES = 50;
 const HOBBY_CHECK_INTERVAL = 60 * 60; // 60 seconds at 60fps
 const HOBBY_CHANCE = 0.6;
 const HOBBY_DURATION = 5 * 60; // 5 seconds at 60fps
+const SEPARATION_FORCE = 0.01; // For preventing overlaps in clusters
 
 // --- HELPER FUNCTIONS ---
 const getAngle = (vx: number, vy: number) => (Math.atan2(vy, vx) * 180) / Math.PI;
@@ -125,7 +131,6 @@ const findShortestAngle = (angle: number): number => {
     return angle;
 };
 
-// New easing function for "pop" effect
 const easeOutBack = (x: number): number => {
     const c1 = 1.70158;
     const c3 = c1 + 1;
@@ -137,10 +142,10 @@ const shouldShape1Yield = (shape1: Shape, shape2: Shape): boolean => {
     const shape2Turns = shape2.consecutiveTurns || 0;
 
     if (shape1Turns > 3 && shape2Turns <= 3) {
-        return false; // shape1 is stressed, so it has priority. shape2 must yield.
+        return false;
     }
     if (shape2Turns > 3 && shape1Turns <= 3) {
-        return true; // shape2 is stressed, shape1 must yield.
+        return true;
     }
     
     const s1_isReckless = shape1.ignoresUiObstacles;
@@ -208,6 +213,8 @@ const placeShapeOnEdge = (
         stuckTimer: 0,
         escapeVector: null,
         stuckWithObstacleId: null,
+        pairedWith: null,
+        isPairLeader: false,
     });
 };
 
@@ -257,6 +264,8 @@ const createNewShape = (id: number, x: number, y: number): Shape => {
         stuckTimer: 0,
         escapeVector: null,
         stuckWithObstacleId: null,
+        pairedWith: null,
+        isPairLeader: false,
     });
     return newShape as Shape;
 };
@@ -293,16 +302,16 @@ const darkenRgb = (rgb: RgbColor, percent: number): RgbColor => {
 
 // --- REACT COMPONENT ---
 const BackgroundShapes: React.FC<BackgroundShapesProps> = ({ obstacles, onUiCollision, generationTrigger, mouseState, onShapeCountChange, isIdle, hoveredTimelineColor, activeSection }) => {
-  const [shapes, setShapes] = useState<Shape[]>([]);
-  const [selectedShapeId, setSelectedShapeId] = useState<number | null>(null);
-  const [isDraggingAngle, setIsDraggingAngle] = useState(false);
+  const [shapes, setShapes] = React.useState<Shape[]>([]);
+  const [selectedShapeId, setSelectedShapeId] = React.useState<number | null>(null);
+  const [isDraggingAngle, setIsDraggingAngle] = React.useState(false);
   
-  const shapesRef = useRef<Shape[]>([]);
-  const animationFrameId = useRef<number | null>(null);
-  const dragStartAngleRef = useRef(0);
-  const shapeStartAngleRef = useRef(0);
+  const shapesRef = React.useRef<Shape[]>([]);
+  const animationFrameId = React.useRef<number | null>(null);
+  const dragStartAngleRef = React.useRef(0);
+  const shapeStartAngleRef = React.useRef(0);
 
-  const timelineColorRgb = useMemo(() => {
+  const timelineColorRgb = React.useMemo(() => {
     if (!hoveredTimelineColor) return null;
     const rgb = hexToRgb(hoveredTimelineColor);
     if (!rgb) return null;
@@ -312,13 +321,12 @@ const BackgroundShapes: React.FC<BackgroundShapesProps> = ({ obstacles, onUiColl
     };
   }, [hoveredTimelineColor]);
 
-  useEffect(() => {
-    // Initialize shapes on mount, ensuring window dimensions are available.
+  React.useEffect(() => {
     setShapes(createInitialShapes({ width: window.innerWidth, height: window.innerHeight }));
-  }, []); // Empty dependency array ensures this runs only once.
+  }, []);
 
-  const lastTrigger = useRef(generationTrigger);
-  useEffect(() => {
+  const lastTrigger = React.useRef(generationTrigger);
+  React.useEffect(() => {
     if (generationTrigger > lastTrigger.current) {
         setShapes(prevShapes => {
             if (prevShapes.length >= MAX_SHAPES) return prevShapes;
@@ -354,7 +362,7 @@ const BackgroundShapes: React.FC<BackgroundShapesProps> = ({ obstacles, onUiColl
     }
   }, [generationTrigger]);
 
-  useEffect(() => {
+  React.useEffect(() => {
     shapesRef.current = shapes;
     onShapeCountChange(shapes.length);
   }, [shapes, onShapeCountChange]);
@@ -380,7 +388,7 @@ const BackgroundShapes: React.FC<BackgroundShapesProps> = ({ obstacles, onUiColl
     shapeStartAngleRef.current = selectedShape.targetRotation;
   };
   
-  useEffect(() => {
+  React.useEffect(() => {
     const handleAngleDragMove = (e: MouseEvent) => {
       if (!isDraggingAngle || selectedShapeId === null) return;
       const selectedShape = shapesRef.current.find(s => s.id === selectedShapeId);
@@ -402,7 +410,7 @@ const BackgroundShapes: React.FC<BackgroundShapesProps> = ({ obstacles, onUiColl
   }, [isDraggingAngle, selectedShapeId]);
 
 
-  useEffect(() => {
+  React.useEffect(() => {
     const animate = () => {
       const allShapes = shapesRef.current;
       if (allShapes.length === 0) {
@@ -421,16 +429,13 @@ const BackgroundShapes: React.FC<BackgroundShapesProps> = ({ obstacles, onUiColl
 
       for (const shape of allShapes) {
         
-        // --- REWORKED: Color transition logic for instant hover effect ---
         if (timelineColorRgb) {
-          // Instantly snap to the timeline color on hover
           shape.currentColorRgb.fill = { ...timelineColorRgb.fill };
           shape.currentColorRgb.stroke = { ...timelineColorRgb.stroke };
         } else {
-          // Smoothly return to the original color when not hovering
           const targetFillRgb = parseRgba(shape.originalColor.fill);
           const targetStrokeRgb = parseRgba(shape.originalColor.stroke);
-          const returnLerpFactor = 0.1; // A quick but smooth return speed
+          const returnLerpFactor = 0.1;
 
           shape.currentColorRgb.fill.r += (targetFillRgb.r - shape.currentColorRgb.fill.r) * returnLerpFactor;
           shape.currentColorRgb.fill.g += (targetFillRgb.g - shape.currentColorRgb.fill.g) * returnLerpFactor;
@@ -447,12 +452,11 @@ const BackgroundShapes: React.FC<BackgroundShapesProps> = ({ obstacles, onUiColl
         if (shape.animationState === 'reforming') {
           shape.animationCounter--;
           const progress = 1 - (shape.animationCounter / ANIMATION_DURATION);
-          shape.scale = easeOutBack(progress); // Use new easing function
+          shape.scale = easeOutBack(progress);
           shape.opacity = progress;
           if (shape.animationCounter <= 0) shape.animationState = 'active';
         }
         
-        // --- Hobby Logic for Reckless Shapes ---
         if (shape.ignoresUiObstacles) {
             shape.hobbyState.checkTimer--;
             if (shape.hobbyState.checkTimer <= 0) {
@@ -470,11 +474,9 @@ const BackgroundShapes: React.FC<BackgroundShapesProps> = ({ obstacles, onUiColl
             }
         }
 
-        // --- NEW: Stuck Logic ---
         let stuckObstacle: { id: string | number, x: number, y: number } | null = null;
         const overlapThresholdFactor = 0.5;
 
-        // Check against other shapes
         for (const other of allShapes) {
             if (shape.id === other.id || other.id === shape.stuckWithObstacleId) continue;
             const distSq = (shape.x - other.x) ** 2 + (shape.y - other.y) ** 2;
@@ -484,7 +486,6 @@ const BackgroundShapes: React.FC<BackgroundShapesProps> = ({ obstacles, onUiColl
                 break;
             }
         }
-        // Check against UI obstacles if not already stuck with a shape
         if (!stuckObstacle && !shape.ignoresUiObstacles) {
             for (const obs of obstacles) {
                 if (obs.id === shape.stuckWithObstacleId) continue;
@@ -499,7 +500,6 @@ const BackgroundShapes: React.FC<BackgroundShapesProps> = ({ obstacles, onUiColl
             }
         }
 
-        // Manage entering/exiting stuck state
         if (stuckObstacle && shape.stuckState === 'none') {
             shape.stuckState = 'escaping';
             shape.stuckTimer = 0;
@@ -528,7 +528,6 @@ const BackgroundShapes: React.FC<BackgroundShapesProps> = ({ obstacles, onUiColl
                 shape.indicatorAngle = getAngle(currentStuckObstacleCenter.x - shape.x, currentStuckObstacleCenter.y - shape.y);
             }
             
-
             if (shape.stuckTimer > 30 * 60) {
                 shape.stuckState = 'random-walk';
             } else if (shape.stuckTimer > 10 * 60 && shape.stuckState === 'escaping') {
@@ -550,7 +549,7 @@ const BackgroundShapes: React.FC<BackgroundShapesProps> = ({ obstacles, onUiColl
                     shape.stuckState = 'escaping';
                     break;
                 case 'random-walk':
-                    if (shape.stuckTimer % 60 === 0) { // Change direction every second
+                    if (shape.stuckTimer % 60 === 0) {
                         shape.targetRotation += (Math.random() - 0.5) * 180;
                     }
                     break;
@@ -561,7 +560,7 @@ const BackgroundShapes: React.FC<BackgroundShapesProps> = ({ obstacles, onUiColl
             shape.currentRotation += angleDiff * turnRate;
             shape.rotation = shape.currentRotation;
             const rad = shape.currentRotation * (Math.PI / 180);
-            shape.speed = shape.baseSpeed * 0.7; // Move with purpose
+            shape.speed = shape.baseSpeed * 0.7;
             shape.vx = Math.cos(rad) * shape.speed;
             shape.vy = Math.sin(rad) * shape.speed;
 
@@ -580,47 +579,84 @@ const BackgroundShapes: React.FC<BackgroundShapesProps> = ({ obstacles, onUiColl
                 let forceFactor = force * MOUSE_FORCE_STRENGTH / (distMouse + 0.1);
                 
                 if (mouseState.isShiftDown) {
-                    forceFactor *= -1; // Reverse the force to attract
+                    forceFactor *= -1;
                 }
 
                 vx += dxMouse * forceFactor * 0.01;
                 vy += dyMouse * forceFactor * 0.01;
             }
             
-            // --- REWORKED: Flocking and Idle Clustering Logic ---
+            // --- REWORKED: Flocking, Clustering, and Separation Logic ---
             let avg_vx = 0, avg_vy = 0, neighbor_count = 0;
-            let same_color_center_x = 0;
-            let same_color_center_y = 0;
-            let same_color_count = 0;
+            let same_color_center_x = 0, same_color_center_y = 0, same_color_count = 0;
+            let separation_vx = 0, separation_vy = 0;
+            
+            // --- NEW: Handle un-pairing when user is active ---
+            if (!isIdle && shape.pairedWith !== null) {
+                const partner = allShapes.find(s => s.id === shape.pairedWith);
+                if (partner) {
+                    partner.pairedWith = null;
+                    partner.isPairLeader = false;
+                }
+                shape.pairedWith = null;
+                shape.isPairLeader = false;
+            }
 
             for (const other of allShapes) {
                 if (shape.id === other.id) continue;
                 const d_sq = (shape.x - other.x)**2 + (shape.y - other.y)**2;
                 
-                // General flocking (alignment) for nearby shapes
                 if (d_sq < CONSTELLATION_DISTANCE ** 2) {
                     avg_vx += other.vx;
                     avg_vy += other.vy;
                     neighbor_count++;
+
+                    // --- NEW: Add separation force to prevent clumping ---
+                    if (d_sq < ((shape.size + other.size) / 1.5)**2) {
+                        const d = Math.sqrt(d_sq) || 1;
+                        separation_vx += (shape.x - other.x) / d;
+                        separation_vy += (shape.y - other.y) / d;
+                    }
                 }
 
-                // For idle state, find center of same-colored shapes
                 if (isIdle && shape.originalColor.fill === other.originalColor.fill) {
                     same_color_center_x += other.x;
                     same_color_center_y += other.y;
                     same_color_count++;
+                    
+                    // --- NEW: Hand-holding ("pairing") logic ---
+                    if (shape.pairedWith === null && other.pairedWith === null && d_sq < ((shape.size + other.size) * 1.5)**2) {
+                        if (Math.random() < 0.0005) { // very low chance per frame to pair up
+                            shape.pairedWith = other.id;
+                            shape.isPairLeader = true; // The shape with the lower ID becomes the leader
+                            other.pairedWith = shape.id;
+                            other.isPairLeader = false;
+                        }
+                    }
+                }
+            }
+            
+            // --- NEW: Follower movement logic for paired shapes ---
+            if (shape.pairedWith !== null && !shape.isPairLeader) {
+                 const leader = allShapes.find(s => s.id === shape.pairedWith);
+                 if (leader) {
+                    const targetX = leader.x - leader.vx * 15; // stay slightly behind the leader
+                    const targetY = leader.y - leader.vy * 15;
+                    const spring_constant = 0.005;
+                    vx += (targetX - shape.x) * spring_constant;
+                    vy += (targetY - shape.y) * spring_constant;
+                 } else { // if leader is gone, break pair
+                    shape.pairedWith = null;
+                 }
+            } else { // Leader and unpaired shapes have normal flocking
+                if (neighbor_count > 0) {
+                    avg_vx /= neighbor_count;
+                    avg_vy /= neighbor_count;
+                    vx += (avg_vx - vx) * FLOCKING_STRENGTH * neighbor_count;
+                    vy += (avg_vy - vy) * FLOCKING_STRENGTH * neighbor_count;
                 }
             }
 
-            // Apply general flocking force
-            if (neighbor_count > 0) {
-                avg_vx /= neighbor_count;
-                avg_vy /= neighbor_count;
-                vx += (avg_vx - vx) * FLOCKING_STRENGTH * neighbor_count;
-                vy += (avg_vy - vy) * FLOCKING_STRENGTH * neighbor_count;
-            }
-
-            // Apply same-color clustering force when idle
             if (isIdle && same_color_count > 0) {
                 const targetX = same_color_center_x / same_color_count;
                 const targetY = same_color_center_y / same_color_count;
@@ -628,9 +664,11 @@ const BackgroundShapes: React.FC<BackgroundShapesProps> = ({ obstacles, onUiColl
                 vx += (targetX - shape.x) * clusterStrength;
                 vy += (targetY - shape.y) * clusterStrength;
             }
+            
+            vx += separation_vx * SEPARATION_FORCE;
+            vy += separation_vy * SEPARATION_FORCE;
 
-            // --- NEW: Content Awareness Force ---
-            if (!isIdle && activeSectionObstacle && shape.id % 4 === 0) { // Only some shapes are curious
+            if (!isIdle && activeSectionObstacle && shape.id % 4 === 0) {
                 const rect = activeSectionObstacle.rect;
                 if (rect.width > 0) {
                     const targetX = rect.left + rect.width / 2;
@@ -751,7 +789,7 @@ const BackgroundShapes: React.FC<BackgroundShapesProps> = ({ obstacles, onUiColl
                         } else {
                             shape.evasionTactic = 'turn';
                             shape.consecutiveTurns = (shape.consecutiveTurns || 0) + 1;
-                            if (Math.random() < 0.3) { // Chance to boost while turning
+                            if (Math.random() < 0.3) {
                                 shape.isBoosting = true;
                             }
                             const turnDirection = diff > 0 ? -1 : 1;
@@ -833,7 +871,7 @@ const BackgroundShapes: React.FC<BackgroundShapesProps> = ({ obstacles, onUiColl
     };
   }, [mouseState, obstacles, onUiCollision, selectedShapeId, isDraggingAngle, isIdle, timelineColorRgb, activeSection]);
 
-  const constellationLines = useMemo(() => {
+  const constellationLines = React.useMemo(() => {
     const lines = [];
     const currentShapes = shapesRef.current;
     for (let i = 0; i < currentShapes.length; i++) {
@@ -841,13 +879,14 @@ const BackgroundShapes: React.FC<BackgroundShapesProps> = ({ obstacles, onUiColl
             const shape1 = currentShapes[i];
             const shape2 = currentShapes[j];
             
-            // --- NEW: Only connect shapes of the same color ---
             if (shape1.originalColor.fill !== shape2.originalColor.fill) continue;
 
+            const isPaired = shape1.pairedWith === shape2.id;
             const distSq = (shape1.x - shape2.x) ** 2 + (shape1.y - shape2.y) ** 2;
-            if (distSq < CONSTELLATION_DISTANCE ** 2) {
+
+            if (isPaired || distSq < CONSTELLATION_DISTANCE ** 2) {
                 const distance = Math.sqrt(distSq);
-                let opacity = (1 - (distance / CONSTELLATION_DISTANCE)) * 0.5;
+                let opacity = isPaired ? 0.8 : (1 - (distance / CONSTELLATION_DISTANCE)) * 0.5;
                 if (isIdle) {
                     opacity = Math.min(1, opacity * 2.5);
                 }
@@ -856,6 +895,7 @@ const BackgroundShapes: React.FC<BackgroundShapesProps> = ({ obstacles, onUiColl
                     x1: shape1.x, y1: shape1.y,
                     x2: shape2.x, y2: shape2.y,
                     opacity: opacity,
+                    isPaired: isPaired,
                 });
             }
         }
@@ -872,7 +912,10 @@ const BackgroundShapes: React.FC<BackgroundShapesProps> = ({ obstacles, onUiColl
                 x1={line.x1} y1={line.y1}
                 x2={line.x2} y2={line.y2}
                 className={`constellation-line ${isIdle ? 'idle' : ''}`}
-                style={{ opacity: line.opacity }}
+                style={{ 
+                    opacity: line.opacity,
+                    strokeWidth: line.isPaired ? '2px' : '1.5px'
+                }}
             />
         ))}
       </svg>
@@ -888,7 +931,7 @@ const BackgroundShapes: React.FC<BackgroundShapesProps> = ({ obstacles, onUiColl
           top: 0,
           transform: `translate(${shape.x - shape.size / 2}px, ${shape.y - shape.size / 2}px) scale(${shape.scale})`,
           opacity: shape.opacity,
-          transition: 'transform 0.05s linear', // Removed opacity transition for pop effect
+          transition: 'transform 0.05s linear',
           zIndex: isSelected ? 10 : 1,
           pointerEvents: 'auto',
         };
@@ -962,9 +1005,7 @@ const BackgroundShapes: React.FC<BackgroundShapesProps> = ({ obstacles, onUiColl
             </div>
             {isSelected && (
               <div className="absolute top-0 left-0 w-full h-full pointer-events-none">
-                {/* Static Ring */}
                 <div className="absolute top-1/2 left-1/2 w-[150%] h-[150%] -translate-x-1/2 -translate-y-1/2 border border-blue-400/50 rounded-full"></div>
-                {/* Line + Handle Container */}
                 <div 
                   className="absolute top-1/2 left-1/2 w-[75%] h-px"
                   style={{ 
@@ -973,7 +1014,6 @@ const BackgroundShapes: React.FC<BackgroundShapesProps> = ({ obstacles, onUiColl
                   }}
                 >
                   <div className="w-full h-full bg-blue-500"></div>
-                  {/* Handle */}
                   <div 
                     className="absolute right-[-8px] top-[-8px] w-4 h-4 bg-white border-2 border-blue-500 rounded-full cursor-grab active:cursor-grabbing pointer-events-auto"
                     onMouseDown={handleAngleDragStart}
