@@ -6,14 +6,19 @@
   <title>Huo_sai's Personal Website</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>
+  <!-- NEW: Add html2canvas for screenshots -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <!-- NEW: Add highlight.js for code snippets -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-light.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,100..800;1,100..800&display=swap" rel="stylesheet">
   <style>
-    /* --- REWORKED: True Theming System --- */
+    /* --- Reworked Theme Variable System --- */
     :root {
-      /* --- Default Light Theme --- */
-      /* UI Colors */
+      /* UI Colors (Fixed Light Theme) */
       --background-card: 255 255 255;
       --background-frosted-base: 224 242 254; /* sky-100 */
       --background-button: 255 255 255 / 0.8;
@@ -29,7 +34,7 @@
       --text-link-hover: 59 130 246;    /* blue-500 */
       --text-link-gh-hover: 22 163 74; /* green-600 */
 
-      --border-primary: 229 231 235;   /* gray-200 */
+      --border-primary: 229 231 235;   /* gray-200/50 */
       --ring-primary: 0 0 0 / 0.05;
 
       /* Background Colors (Themeable) */
@@ -41,7 +46,6 @@
       --background-frosted: var(--background-frosted-base) / 0.3;
     }
 
-    /* --- Light Theme Palettes --- */
     [data-theme="rose"] {
       --background-primary: 254 242 242;
       --background-home: 254 226 226;
@@ -50,6 +54,7 @@
       --background-contact: 254 242 242;
       --background-frosted: 251 146 146 / 0.2;
     }
+
     [data-theme="teal"] {
       --background-primary: 240 253 250;
       --background-home: 204 251 241;
@@ -58,6 +63,7 @@
       --background-contact: 232 252 252;
       --background-frosted: 74 222 128 / 0.2;
     }
+    
     [data-theme="slate"] {
       --background-primary: 241 245 249;
       --background-home: 226 232 240;
@@ -66,6 +72,7 @@
       --background-contact: 226 232 240;
       --background-frosted: 148 163 184 / 0.2;
     }
+
     [data-theme="lavender"] {
       --background-primary: 237 233 254; /* violet-100 */
       --background-home: 221 214 254;   /* violet-200 */
@@ -74,6 +81,7 @@
       --background-contact: 221 214 254;
       --background-frosted: 196 181 253 / 0.2; /* violet-300 */
     }
+    
     [data-theme="mint"] {
       --background-primary: 240 253 244; /* green-50 */
       --background-home: 220 252 231;   /* green-100 */
@@ -81,28 +89,6 @@
       --background-timeline: 230 253 237;
       --background-contact: 220 252 231;
       --background-frosted: 167 243 208 / 0.2; /* green-200 */
-    }
-
-    /* --- Dark Themes --- */
-    [data-theme="deep-space"],
-    [data-theme="forest"],
-    [data-theme="wine-red"] {
-        --background-card: 42 42 62;
-        --background-button: 50 50 80 / 0.6;
-        --background-button-refresh: 50 50 80 / 0.4;
-        --background-countdown: 42 42 62 / 0.7;
-        --background-countdown-today: 34 197 94 / 0.2;
-
-        --text-primary: 226 232 240;    /* slate-200 */
-        --text-secondary: 203 213 225;  /* slate-300 */
-        --text-tertiary: 148 163 184;   /* slate-400 */
-        --text-quaternary: 100 116 139; /* slate-500 */
-        --text-countdown-today: 110 231 183; /* emerald-300 */
-        --text-link-hover: 96 165 250;   /* blue-400 */
-        --text-link-gh-hover: 74 222 128; /* green-400 */
-
-        --border-primary: 71 85 105;   /* slate-600 */
-        --ring-primary: 255 255 255 / 0.1;
     }
 
     [data-theme="deep-space"] {
@@ -290,6 +276,20 @@
     .animate-toast-in-right {
       animation: toast-in-right 0.5s cubic-bezier(0.21, 1.02, 0.73, 1) forwards;
     }
+    
+    @keyframes toast-in-br {
+      from {
+        transform: translateX(110%) translateY(30%);
+        opacity: 0;
+      }
+      to {
+        transform: translateX(0) translateY(0);
+        opacity: 1;
+      }
+    }
+    .animate-toast-in-br {
+      animation: toast-in-br 0.6s cubic-bezier(0.21, 1.02, 0.73, 1) forwards;
+    }
 
     .path-dot {
       position: absolute;
@@ -388,6 +388,33 @@
       animation: eew-ripple-effect 1.5s ease-out forwards;
       z-index: 100;
       pointer-events: none;
+    }
+    
+    /* --- REWORKED: Guided Tour Styles --- */
+    .tour-highlight {
+      position: fixed;
+      border-radius: 8px;
+      box-shadow: 0 0 0 9999px rgba(18, 24, 41, 0.7), 0 0 15px rgba(255,255,255,0.5);
+      transition: all 0.4s ease-in-out;
+      pointer-events: none;
+      z-index: 1000;
+    }
+    .tour-tooltip {
+      position: fixed;
+      background: rgb(var(--background-card));
+      padding: 1rem;
+      border-radius: 8px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      z-index: 1001;
+      max-width: 300px;
+      transition: all 0.4s ease-in-out;
+    }
+    
+    /* --- NEW: Capture Mode Styles --- */
+    .capture-mode .hide-on-capture {
+      opacity: 0 !important;
+      pointer-events: none !important;
+      transition: opacity 0.3s ease-in-out;
     }
   </style>
 <script type="importmap">
