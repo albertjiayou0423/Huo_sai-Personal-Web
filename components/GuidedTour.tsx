@@ -15,57 +15,92 @@ const tourSteps = [
         refKey: 'step1',
         section: 'home',
         title: '欢迎！',
-        text: '这里是我的交互式个人网站。让我们快速了解一下这里的隐藏功能吧！',
+        text: '这里是我的交互式个人网站。让我们花一分钟快速了解一下这里的隐藏功能吧！',
         position: 'bottom',
     },
     {
         refKey: 'step2',
         section: 'home',
-        title: '手势创造',
-        text: '试着在屏幕的空白区域按住鼠标画一个完整的圆圈，看看会发生什么？',
+        title: '手势创造：画个圈',
+        text: '网站的背景是可以互动的。试着在屏幕的空白区域按住鼠标左键并画一个完整的圆圈，看看会发生什么？',
         position: 'bottom',
+    },
+    {
+        refKey: 'center',
+        section: 'home',
+        title: '力场交互：推',
+        text: '很棒！现在，试着按住鼠标左键。你会产生一个排斥力场，将周围的形状推开。',
+        position: 'center',
+    },
+    {
+        refKey: 'center',
+        section: 'home',
+        title: '力场交互：吸',
+        text: '想把它们吸过来？也很简单！按住 Shift 键的同时，再按住鼠标左键，就可以产生一个引力场。',
+        position: 'center',
     },
     {
         refKey: 'step3',
         section: 'home',
         title: '个性化主题',
-        text: '点击这里的调色盘，可以自由切换网站的背景主题，甚至可以自定义颜色。',
+        text: '点击右上角的调色盘，可以自由切换网站的背景主题，甚至可以自定义你最喜欢的颜色。',
         position: 'bottom-right',
+    },
+    {
+        refKey: 'aboutTitleRef',
+        section: 'about',
+        title: '关于我',
+        text: '现在我们来到的“关于我”区域。这里有更多可以互动的地方。',
+        position: 'bottom',
     },
     {
         refKey: 'step4',
         section: 'about',
-        title: '互动卡片',
-        text: '网站上的很多元素都可以点击互动，比如这里的“编程”卡片，点击它有惊喜哦！',
+        title: '可互动的卡片',
+        text: '网站上的很多元素都可以点击互动。比如这里的“编程”和“设计”卡片，点击它们有惊喜哦！',
         position: 'top',
     },
     {
         refKey: 'step5',
         section: 'about',
-        title: '地震速报',
-        text: '对地震速报感兴趣？可以在这里查询不同地区的最新信息。',
+        title: '地震速报 (EEW)',
+        text: '我对防灾减灾很感兴趣。你可以在这里查询不同地区的最新地震速报信息。',
         position: 'right',
     },
     {
         refKey: 'step6',
         section: 'timeline',
-        title: '编程之旅',
-        text: '这是我的编程学习之旅。将鼠标悬停在时间点上，背景也会随之变化哦。',
+        title: '我的编程之旅',
+        text: '这是我的编程学习之旅。将鼠标悬停在任意时间点上，背景也会随之变化。',
         position: 'top',
     },
     {
         refKey: 'step7',
         section: 'timeline',
-        title: '发现成就',
-        text: '网站中隐藏了许多成就，点击这里查看你已经解锁了哪些。',
+        title: '解锁成就',
+        text: '你的每一次探索都会被记录。点击左下角的奖杯图标，可以查看你已经解锁了哪些隐藏成就。',
         position: 'top-left',
     },
     {
         refKey: 'step8',
         section: 'timeline',
         title: '定格艺术',
-        text: '觉得当前画面很美？可以点击这里，将它作为独特的艺术品保存下来。祝你玩得愉快！',
+        text: '觉得当前动态的画面很美？可以点击相机图标，将它作为独特的艺术品截图保存下来。',
         position: 'top-left',
+    },
+    {
+        refKey: 'contactLinksRef',
+        section: 'contact',
+        title: '保持联系',
+        text: '欢迎通过邮件或 GitHub 与我联系，期待与你交流！',
+        position: 'top',
+    },
+    {
+        refKey: 'center',
+        section: 'contact',
+        title: '探索愉快！',
+        text: '你已经了解了所有基础功能。现在，自由地探索吧！祝你玩得开心～',
+        position: 'center',
     }
 ];
 
@@ -79,6 +114,23 @@ const GuidedTour: React.FC<GuidedTourProps> = ({ tourRefs, onClose, scrollToSect
 
     useEffect(() => {
         const updatePosition = () => {
+            if (currentStep.refKey === 'center') {
+                setStyle({
+                    width: '0px',
+                    height: '0px',
+                    top: '50%',
+                    left: '50%',
+                    boxShadow: '0 0 0 9999px rgba(18, 24, 41, 0.7)',
+                    borderRadius: '50%'
+                });
+                setTooltipStyle({
+                    top: '50%',
+                    left: '50%',
+                    transform: 'translate(-50%, -50%)',
+                });
+                return;
+            }
+
             const element = tourRefs[currentStep.refKey]?.current;
             if (element) {
                 const rect = element.getBoundingClientRect();
@@ -149,7 +201,8 @@ const GuidedTour: React.FC<GuidedTourProps> = ({ tourRefs, onClose, scrollToSect
     };
 
     return (
-        <div className="fixed inset-0 z-[999] animate-fadeIn">
+        // FIX: Add pointer-events-none to the root container to allow clicks to pass through
+        <div className="fixed inset-0 z-[999] animate-fadeIn pointer-events-none">
             <div className="tour-highlight" style={style}></div>
             <div className="tour-tooltip animate-scaleUp" style={tooltipStyle}>
                 <h3 className="text-lg font-bold mb-2 text-[rgb(var(--text-secondary))]">{currentStep.title}</h3>
@@ -159,7 +212,7 @@ const GuidedTour: React.FC<GuidedTourProps> = ({ tourRefs, onClose, scrollToSect
                         跳过
                     </button>
                     <button onClick={handleNext} className="px-4 py-2 bg-blue-500 text-white text-sm font-semibold rounded-md hover:bg-blue-600 transition-colors">
-                        {isLastStep ? '完成' : '下一步'}
+                        {isLastStep ? '完成！' : '下一步'}
                     </button>
                 </div>
             </div>

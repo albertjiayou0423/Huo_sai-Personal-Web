@@ -1,5 +1,5 @@
 import React from 'react';
-import { TrophyIcon, ClockIcon, SparklesIcon } from './Icons';
+import { Icon } from './Icons';
 
 interface Stats {
     timeOnSite: number;
@@ -27,17 +27,17 @@ const StatsDashboard: React.FC<StatsDashboardProps> = ({ stats, achievementsUnlo
             <h3 className="text-sm font-semibold text-center text-[rgb(var(--text-quaternary))] mb-4 tracking-wider">你的探索之旅</h3>
             <div className="grid grid-cols-3 gap-4 text-center">
                 <div className="flex flex-col items-center">
-                    <ClockIcon className="w-6 h-6 mb-1 text-sky-500" />
+                    <Icon name="schedule" className="mb-1 text-sky-500 !text-2xl" />
                     <span className="text-xl font-bold text-[rgb(var(--text-secondary))]">{formatTime(stats.timeOnSite)}</span>
                     <span className="text-xs text-[rgb(var(--text-tertiary))]">探索时长</span>
                 </div>
                 <div className="flex flex-col items-center">
-                    <SparklesIcon className="w-6 h-6 mb-1 text-violet-500" />
+                    <Icon name="auto_awesome" className="mb-1 text-violet-500 !text-2xl" />
                     <span className="text-xl font-bold text-[rgb(var(--text-secondary))]">{stats.shapesCreated}</span>
                     <span className="text-xs text-[rgb(var(--text-tertiary))]">创造形状</span>
                 </div>
                 <div className="flex flex-col items-center">
-                    <TrophyIcon className="w-6 h-6 mb-1 text-amber-500" />
+                    <Icon name="emoji_events" className="mb-1 text-amber-500 !text-2xl" />
                     <span className="text-xl font-bold text-[rgb(var(--text-secondary))]">{achievementsUnlocked} / {totalAchievements}</span>
                     <span className="text-xs text-[rgb(var(--text-tertiary))]">解锁成就</span>
                 </div>

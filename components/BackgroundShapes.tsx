@@ -1,4 +1,6 @@
+
 import React from 'react';
+import { Icon } from './Icons';
 
 // --- TYPE DEFINITIONS ---
 type ShapeType = 'circle' | 'rounded-square';
@@ -77,6 +79,12 @@ interface Shape {
   
   pairedWith: number | null;
   isPairLeader: boolean;
+  pushedByMouse: boolean;
+
+  // --- NEW: GitHub Event Properties ---
+  isGithubEvent?: true;
+  githubUrl?: string;
+  lifespan?: number;
 }
 
 interface BackgroundShapesProps {
@@ -88,7 +96,12 @@ interface BackgroundShapesProps {
   isIdle: boolean;
   hoveredTimelineColor: string | null;
   activeSection: string;
-  isPaused: boolean; // --- NEW ---
+  isPaused: boolean; 
+  onShapeRedirected: () => void;
+  onShapePushedOffscreen: () => void;
+  onPairFormed: () => void;
+  // --- NEW: GitHub Event Trigger Prop ---
+  githubEventTrigger: { url: string; message: string; repo: string } | null;
 }
 
 // --- CONSTANTS ---
@@ -171,8 +184,15 @@ const placeShapeOnEdge = (shape: Shape, bounds: { width: number; height: number 
         case 3: x = -padding; y = Math.random() * bounds.height; angle = Math.random() * 120 - 30; break;
     }
     
+    // For GitHub events, ensure they travel across the screen
+    if (shape.isGithubEvent) {
+        angle = getAngle(bounds.width / 2 - x, bounds.height / 2 - y) + (Math.random() - 0.5) * 40;
+    }
+
     const maxSpeed = shape.personality === 'fast' ? 0.8 : 0.6;
-    const speed = (Math.random() * 0.3 + 0.7) * maxSpeed;
+    let speed = (Math.random() * 0.3 + 0.7) * maxSpeed;
+    if (shape.isGithubEvent) speed = 1.0; // Consistent speed for event shapes
+
     const angleRad = angle * (Math.PI / 180);
     const vx = Math.cos(angleRad) * speed;
     const vy = Math.sin(angleRad) * speed;
@@ -186,7 +206,7 @@ const placeShapeOnEdge = (shape: Shape, bounds: { width: number; height: number 
         avoidanceAngle: 0, evasionCooldownFrames: 0, isHovered: false,
         evasionTactic: 'none', pathIsObstructed: false, isBoosting: false, consecutiveTurns: 0,
         stuckState: 'none', stuckTimer: 0, escapeVector: null, stuckWithObstacleId: null,
-        pairedWith: null, isPairLeader: false,
+        pairedWith: null, isPairLeader: false, pushedByMouse: false,
     });
 };
 
@@ -220,7 +240,7 @@ const createNewShape = (id: number, x: number, y: number): Shape => {
         avoidanceAngle: 0, evasionCooldownFrames: 0, isHovered: false,
         evasionTactic: 'none', pathIsObstructed: false, isBoosting: false, consecutiveTurns: 0,
         stuckState: 'none', stuckTimer: 0, escapeVector: null, stuckWithObstacleId: null,
-        pairedWith: null, isPairLeader: false,
+        pairedWith: null, isPairLeader: false, pushedByMouse: false,
     });
     return newShape as Shape;
 };
@@ -244,7 +264,7 @@ const darkenRgb = (rgb: RgbColor, percent: number): RgbColor => {
 };
 
 // --- REACT COMPONENT ---
-const BackgroundShapes: React.FC<BackgroundShapesProps> = ({ obstacles, onUiCollision, generationTrigger, mouseState, onShapeCountChange, isIdle, hoveredTimelineColor, activeSection, isPaused }) => {
+const BackgroundShapes: React.FC<BackgroundShapesProps> = ({ obstacles, onUiCollision, generationTrigger, mouseState, onShapeCountChange, isIdle, hoveredTimelineColor, activeSection, isPaused, onShapeRedirected, onShapePushedOffscreen, onPairFormed, githubEventTrigger }) => {
   const [shapes, setShapes] = React.useState<Shape[]>([]);
   const [selectedShapeId, setSelectedShapeId] = React.useState<number | null>(null);
   const [isDraggingAngle, setIsDraggingAngle] = React.useState(false);
@@ -289,6 +309,35 @@ const BackgroundShapes: React.FC<BackgroundShapesProps> = ({ obstacles, onUiColl
         lastTrigger.current = generationTrigger;
     }
   }, [generationTrigger]);
+  
+  const lastGithubEventTrigger = React.useRef(githubEventTrigger);
+  React.useEffect(() => {
+    if (githubEventTrigger && githubEventTrigger !== lastGithubEventTrigger.current) {
+        setShapes(prevShapes => {
+            if (prevShapes.length >= MAX_SHAPES) return prevShapes;
+            const lastId = (prevShapes.length > 0 ? Math.max(...prevShapes.map(s => s.id)) : -1);
+            const newShape = createNewShape(lastId + 1, 0, 0);
+            
+            Object.assign(newShape, {
+                isGithubEvent: true,
+                githubUrl: githubEventTrigger.url,
+                lifespan: 30 * 60, // 30 seconds at 60fps
+                size: 80,
+                type: 'rounded-square',
+                originalColor: { fill: 'rgba(50, 50, 60, 0.95)', stroke: 'rgba(200, 200, 220, 1)' },
+                color: { fill: 'rgba(50, 50, 60, 0.95)', stroke: 'rgba(200, 200, 220, 1)' },
+                currentColorRgb: { fill: { r: 50, g: 50, b: 60 }, stroke: { r: 200, g: 200, b: 220 } },
+                ignoresUiObstacles: true,
+                personality: 'fast',
+            });
+            
+            placeShapeOnEdge(newShape, { width: window.innerWidth, height: window.innerHeight });
+            
+            return [...prevShapes, newShape];
+        });
+        lastGithubEventTrigger.current = githubEventTrigger;
+    }
+  }, [githubEventTrigger]);
 
   React.useEffect(() => {
     shapesRef.current = shapes;
@@ -322,19 +371,23 @@ const BackgroundShapes: React.FC<BackgroundShapesProps> = ({ obstacles, onUiColl
       const angleDelta = findShortestAngle(currentAngle - dragStartAngleRef.current);
       selectedShape.targetRotation = shapeStartAngleRef.current + angleDelta;
     };
-    const handleAngleDragEnd = () => setIsDraggingAngle(false);
+    const handleAngleDragEnd = () => {
+        if(isDraggingAngle) {
+            onShapeRedirected();
+            setIsDraggingAngle(false);
+        }
+    };
     window.addEventListener('mousemove', handleAngleDragMove);
     window.addEventListener('mouseup', handleAngleDragEnd);
     return () => {
         window.removeEventListener('mousemove', handleAngleDragMove);
         window.removeEventListener('mouseup', handleAngleDragEnd);
     };
-  }, [isDraggingAngle, selectedShapeId]);
+  }, [isDraggingAngle, selectedShapeId, onShapeRedirected]);
 
 
   React.useEffect(() => {
     const animate = () => {
-      // --- NEW: Pause animation loop ---
       if (isPaused) {
         animationFrameId.current = requestAnimationFrame(animate);
         return;
@@ -355,6 +408,23 @@ const BackgroundShapes: React.FC<BackgroundShapesProps> = ({ obstacles, onUiColl
       const activeSectionObstacle = obstacles.find(o => o.id.includes(activeSection));
 
       for (const shape of allShapes) {
+        // --- NEW: Separate logic path for GitHub event shapes ---
+        if (shape.isGithubEvent) {
+            if (shape.lifespan !== undefined) {
+                shape.lifespan--;
+                if (shape.lifespan < 60) { // Fade out in the last second
+                    shape.opacity = Math.max(0, shape.lifespan / 60);
+                }
+            }
+            shape.x += shape.vx;
+            shape.y += shape.vy;
+            const isOutOfBounds = shape.x < -padding || shape.x > bounds.width + padding || shape.y < -padding || shape.y > bounds.height + padding;
+            if (isOutOfBounds) {
+                shape.lifespan = 1; // Mark for deletion if it goes off-screen
+            }
+            continue; // Skip all other logic for this special shape
+        }
+
         if (timelineColorRgb) {
           shape.currentColorRgb.fill = { ...timelineColorRgb.fill };
           shape.currentColorRgb.stroke = { ...timelineColorRgb.stroke };
@@ -448,6 +518,8 @@ const BackgroundShapes: React.FC<BackgroundShapesProps> = ({ obstacles, onUiColl
                 let forceFactor = force * MOUSE_FORCE_STRENGTH / (distMouse + 0.1);
                 if (mouseState.isShiftDown) forceFactor *= -1;
                 vx += dxMouse * forceFactor * 0.01; vy += dyMouse * forceFactor * 0.01;
+                shape.pushedByMouse = true;
+                setTimeout(() => shape.pushedByMouse = false, 1000);
             }
             let avg_vx = 0, avg_vy = 0, neighbor_count = 0, same_color_center_x = 0, same_color_center_y = 0, same_color_count = 0, separation_vx = 0, separation_vy = 0;
             if (!isIdle && shape.pairedWith !== null) {
@@ -465,7 +537,11 @@ const BackgroundShapes: React.FC<BackgroundShapesProps> = ({ obstacles, onUiColl
                 if (isIdle && shape.originalColor.fill === other.originalColor.fill) {
                     same_color_center_x += other.x; same_color_center_y += other.y; same_color_count++;
                     if (shape.pairedWith === null && other.pairedWith === null && d_sq < ((shape.size + other.size) * 1.5)**2) {
-                        if (Math.random() < 0.0005) { shape.pairedWith = other.id; shape.isPairLeader = true; other.pairedWith = shape.id; other.isPairLeader = false; }
+                        if (Math.random() < 0.0005) { 
+                            shape.pairedWith = other.id; shape.isPairLeader = true; 
+                            other.pairedWith = shape.id; other.isPairLeader = false; 
+                            onPairFormed();
+                        }
                     }
                 }
             }
@@ -551,16 +627,27 @@ const BackgroundShapes: React.FC<BackgroundShapesProps> = ({ obstacles, onUiColl
         const isOutOfBounds = shape.x < -padding || shape.x > bounds.width + padding || shape.y < -padding || shape.y > bounds.height + padding;
         const isInvalid = !isFinite(shape.x) || !isFinite(shape.y);
         if (isOutOfBounds || isInvalid) {
-             if (shape.id === selectedShapeId) { setSelectedShapeId(null); setIsDraggingAngle(false); }
+            if (shape.pushedByMouse) {
+                onShapePushedOffscreen();
+            }
+            if (shape.id === selectedShapeId) { setSelectedShapeId(null); setIsDraggingAngle(false); }
             placeShapeOnEdge(shape, bounds);
         }
       }
-      setShapes([...allShapes]);
+      
+      const shapesToKeep = allShapes.filter(shape => !shape.isGithubEvent || (shape.lifespan !== undefined && shape.lifespan > 0));
+
+      if (shapesToKeep.length !== allShapes.length) {
+          setShapes(shapesToKeep);
+      } else {
+          setShapes([...allShapes]);
+      }
+      
       animationFrameId.current = requestAnimationFrame(animate);
     };
     animationFrameId.current = requestAnimationFrame(animate);
     return () => { if (animationFrameId.current) cancelAnimationFrame(animationFrameId.current); };
-  }, [mouseState, obstacles, onUiCollision, selectedShapeId, isDraggingAngle, isIdle, timelineColorRgb, activeSection, isPaused]);
+  }, [mouseState, obstacles, onUiCollision, selectedShapeId, isDraggingAngle, isIdle, timelineColorRgb, activeSection, isPaused, onPairFormed, onShapePushedOffscreen, onShapeRedirected]);
 
   const constellationLines = React.useMemo(() => {
     const lines = [];
@@ -590,16 +677,62 @@ const BackgroundShapes: React.FC<BackgroundShapesProps> = ({ obstacles, onUiColl
       {shapes.map((shape) => {
         const isSelected = shape.id === selectedShapeId;
         const borderRadius = shape.type === 'circle' ? '50%' : '0.5rem';
-        const outerContainerStyle: React.CSSProperties = { position: 'absolute', width: `${shape.size}px`, height: `${shape.size}px`, left: 0, top: 0, transform: `translate(${shape.x - shape.size / 2}px, ${shape.y - shape.size / 2}px) scale(${shape.scale})`, opacity: shape.opacity, transition: 'transform 0.05s linear', zIndex: isSelected ? 10 : 1, pointerEvents: 'auto' };
+        
+        const outerContainerStyle: React.CSSProperties = { 
+            position: 'absolute', 
+            width: `${shape.size}px`, 
+            height: `${shape.size}px`, 
+            left: 0, 
+            top: 0, 
+            transform: `translate(${shape.x - shape.size / 2}px, ${shape.y - shape.size / 2}px) scale(${shape.scale})`, 
+            opacity: shape.opacity, 
+            transition: 'transform 0.05s linear, opacity 0.5s ease-out',
+            zIndex: shape.isGithubEvent ? 11 : (isSelected ? 10 : 1), 
+            pointerEvents: 'auto' 
+        };
         const rotatingContainerStyle: React.CSSProperties = { position: 'relative', width: '100%', height: '100%', transform: `rotate(${shape.rotation}deg)`, transition: 'transform 0.1s linear' };
-        const shapeStyle: React.CSSProperties = { position: 'absolute', width: '100%', height: '100%', backgroundColor: shape.color.fill, border: `2px solid ${shape.color.stroke}`, transition: 'box-shadow 0.3s ease-in-out, transform 0.3s ease-in-out, background-color 0.5s ease-in-out, border-color 0.5s ease-in-out', borderRadius: borderRadius, transform: isSelected ? 'translateY(-10px)' : 'translateY(0px)' };
+        
+        const shapeStyle: React.CSSProperties = { 
+            position: 'absolute', 
+            width: '100%', 
+            height: '100%', 
+            backgroundColor: shape.color.fill, 
+            border: `2px solid ${shape.color.stroke}`, 
+            transition: 'box-shadow 0.3s ease-in-out, transform 0.3s ease-in-out, background-color 0.5s ease-in-out, border-color 0.5s ease-in-out', 
+            borderRadius: shape.isGithubEvent ? '0.5rem' : borderRadius, 
+            transform: isSelected ? 'translateY(-10px)' : 'translateY(0px)' 
+        };
         if (isSelected) shapeStyle.boxShadow = '0 10px 25px -5px rgba(0, 0, 0, 0.2), 0 8px 10px -6px rgba(0, 0, 0, 0.2)';
+        
+        if (shape.isGithubEvent) {
+            return (
+                <a
+                  key={shape.id}
+                  href={shape.githubUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={outerContainerStyle}
+                  className="group"
+                  title="New GitHub Activity"
+                >
+                  <div style={rotatingContainerStyle}>
+                    <div style={shapeStyle}>
+                      <div className="w-full h-full flex items-center justify-center transition-transform duration-300 group-hover:scale-110">
+                        <Icon name="github-original" provider="devicon" className="text-4xl text-white" />
+                      </div>
+                    </div>
+                  </div>
+                </a>
+            );
+        }
+
         const isIndicatorVisible = shape.collisionState === 'warning' || shape.collisionState === 'avoiding';
         const isAvoiding = shape.collisionState === 'avoiding';
         const relativeIndicatorAngle = findShortestAngle(shape.indicatorAngle - shape.rotation);
         const gradientStartAngle = relativeIndicatorAngle - 54;
         const indicatorStyle = { borderRadius, '--indicator-angle': `${gradientStartAngle}deg` } as React.CSSProperties;
         const arrowColor = shape.ignoresUiObstacles ? '#64748b' : shape.color.stroke;
+
         return (
           <div key={shape.id} style={outerContainerStyle}>
             <div style={rotatingContainerStyle}>

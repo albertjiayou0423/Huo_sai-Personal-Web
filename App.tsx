@@ -1,14 +1,16 @@
+
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import BackgroundShapes from './components/BackgroundShapes';
 import Confetti from './components/Confetti';
 import ProgrammerDayCountdown from './components/ProgrammerDayCountdown';
-import { CodeIcon, DesignIcon, GithubIcon, MailIcon, ZapIcon, EarthquakeIcon, PartyPopperIcon, ClockIcon, PaletteIcon, HelpIcon, SparklesIcon, CircleArrowIcon, MoveIcon, MouseClickIcon, MagnetIcon, ConstellationIcon, TimelineIcon, TrophyIcon, CameraIcon, IconProps } from './components/Icons';
+import { Icon } from './components/Icons';
 import { useDailyGreeting } from './hooks/useDailyGreeting';
 import AchievementsModal, { Achievement } from './components/AchievementsModal';
 import AchievementToast from './components/AchievementToast';
 import GuidedTour from './components/GuidedTour';
 import CodeSnippetModal from './components/CodeSnippetModal';
 import StatsDashboard from './components/StatsDashboard';
+import AccessibilityModal from './components/AccessibilityModal';
 
 // Define background colors for each section using CSS variables
 const sectionBgVars: { [key: string]: string } = {
@@ -52,6 +54,31 @@ interface UserStats {
   timeOnSite: number; // in seconds
   shapesCreated: number;
 }
+
+// --- NEW: Custom Theme Interface ---
+interface CustomTheme {
+  primary: string;
+  accent: string;
+}
+
+// --- UPDATED: Expanded Accessibility Settings Interface ---
+interface AccessibilitySettings {
+    reduceMotion: boolean;
+    disableIdle: boolean;
+    highContrast: boolean;
+    hideShapes: boolean;
+    largeCursor: boolean;
+    largeText: boolean;
+    disableFlashes: boolean;
+}
+
+// --- NEW: GitHub Event Interface ---
+interface GithubEventTrigger {
+    url: string;
+    message: string;
+    repo: string;
+}
+
 
 const calculateAge = (birthDate: Date): number => {
   const today = new Date();
@@ -103,15 +130,31 @@ const parseEewTime = (timeStr: string | undefined, timezoneOffset: number): Date
     return utcDate;
 }
 
+// --- UPDATED: Achievements now total 16 and include parent relationships ---
 const initialAchievements: Omit<Achievement, 'unlocked'>[] = [
-    { id: 'shape_creator', title: '形状创造者', description: '首次通过画圈手势生成新形状。', icon: <CircleArrowIcon /> },
-    { id: 'gravity_master', title: '引力大师', description: '首次使用引力场吸引周围的形状。', icon: <MagnetIcon /> },
-    { id: 'eew_discoverer', title: 'EEW 发现者', description: '首次查询一个地区的地震速报。', icon: <EarthquakeIcon /> },
-    { id: 'confetti_cannon', title: '礼炮手', description: '在特别的日子里，撒下第一捧礼花。', icon: <PartyPopperIcon /> },
-    { id: 'colorist', title: '调色师', description: '首次更换网站的背景主题配色。', icon: <PaletteIcon /> },
-    { id: 'time_traveler', title: '时间旅人', description: '在时间线上回顾过去与未来。', icon: <TimelineIcon /> },
-    { id: 'secret_revealer', title: '秘密揭示者', description: '发现了隐藏功能说明，真棒！', icon: <HelpIcon /> },
-    { id: 'astronomer', title: '天文学家', description: '静静观察，发现形状间的星群。', icon: <ConstellationIcon /> },
+    // --- Exploration Branch ---
+    { id: 'shape_creator', parent: null, title: '形状创造者', description: '首次通过画圈手势生成新形状。', icon: <Icon name="autorenew" /> },
+    { id: 'precision_guidance', parent: 'shape_creator', title: '精准制导', description: '首次用右键拖拽设定形状方向。', icon: <Icon name="explore" /> },
+    { id: 'gravity_master', parent: 'shape_creator', title: '引力大师', description: '首次使用引力场吸引周围的形状。', icon: <Icon name="attractions" /> },
+    { id: 'mighty_push', parent: 'gravity_master', title: '大力出奇迹', description: '用鼠标力场将一个形状推出屏幕。', icon: <Icon name="rocket_launch" /> },
+    { id: 'core_overload', parent: 'mighty_push', title: '核心过载', description: '让屏幕上的形状总数超过45个。', icon: <Icon name="hub" /> },
+    
+    // --- Feature Discovery Branch ---
+    { id: 'secret_revealer', parent: null, title: '秘密揭示者', description: '发现了隐藏功能说明，真棒！', icon: <Icon name="help" /> },
+    { id: 'all_seeing_eye', parent: 'secret_revealer', title: '全知之眼', description: '打开了网站上所有类型的弹窗。', icon: <Icon name="visibility" /> },
+    { id: 'easter_egg_hunter', parent: 'secret_revealer', title: '彩蛋猎人', description: '连续点击主标题5次触发了礼花。', icon: <Icon name="egg" /> },
+    { id: 'code_resonance', parent: 'secret_revealer', title: '代码共鸣', description: '点击“编程”卡片触发了故障特效。', icon: <Icon name="data_object" /> },
+
+    // --- Customization Branch ---
+    { id: 'colorist', parent: null, title: '调色师', description: '首次更换网站的背景主题配色。', icon: <Icon name="palette" /> },
+    { id: 'personalization_master', parent: 'colorist', title: '个性化大师', description: '创建并保存了你的自定义主题。', icon: <Icon name="brush" /> },
+    { id: 'theme_architect', parent: 'personalization_master', title: '主题建筑师', description: '创建并分享了你的第一个自定义主题。', icon: <Icon name="share" /> },
+
+    // --- Standalone Achievements ---
+    { id: 'eew_discoverer', parent: null, title: 'EEW 发现者', description: '首次查询一个地区的地震速报。', icon: <Icon name="earthquake" /> },
+    { id: 'time_traveler', parent: null, title: '时间旅人', description: '在时间线上回顾过去与未来。', icon: <Icon name="timeline" /> },
+    { id: 'astronomer', parent: null, title: '天文学家', description: '静静观察，发现形状间的星群。', icon: <Icon name="stars" /> },
+    { id: 'hand_in_hand', parent: 'astronomer', title: '手牵手', description: '观察到两个同色形状配对而行。', icon: <Icon name="favorite" /> },
 ];
 
 
@@ -123,8 +166,9 @@ export default function App() {
   
   const [palette, setPalette] = useState('slate');
   const [isPaletteModalOpen, setIsPaletteModalOpen] = useState(false);
-  const [isCustomColorModalOpen, setIsCustomColorModalOpen] = useState(false);
-  const [tempCustomColor, setTempCustomColor] = useState(localStorage.getItem('hs-custom-color') || '#f1f5f9');
+  const [isCustomThemeModalOpen, setIsCustomThemeModalOpen] = useState(false);
+  const [tempCustomTheme, setTempCustomTheme] = useState<CustomTheme>({ primary: '#f1f5f9', accent: '#e2e8f0' });
+  const [showShareToast, setShowShareToast] = useState(false);
 
   const dailyGreeting = useDailyGreeting();
   
@@ -140,32 +184,27 @@ export default function App() {
   const [achievementUnlockQueue, setAchievementUnlockQueue] = useState<Achievement[]>([]);
   const [currentToast, setCurrentToast] = useState<Achievement | null>(null);
 
-  // --- NEW: Feature States ---
   const [isCaptureMode, setIsCaptureMode] = useState(false);
   const [isCodeSnippetModalOpen, setIsCodeSnippetModalOpen] = useState(false);
   const [isTourOpen, setIsTourOpen] = useState(false);
   const [stats, setStats] = useState<UserStats>({ timeOnSite: 0, shapesCreated: 0 });
 
-  // --- NEW: Stats Management ---
-  useEffect(() => {
-    const savedStats = localStorage.getItem('hs-user-stats');
-    if (savedStats) {
-      try {
-        const parsedStats = JSON.parse(savedStats);
-        setStats(prev => ({ ...prev, ...parsedStats }));
-      } catch (e) {
-        localStorage.removeItem('hs-user-stats');
-      }
-    }
-    const timer = setInterval(() => {
-      setStats(prev => {
-        const newStats = { ...prev, timeOnSite: prev.timeOnSite + 1 };
-        localStorage.setItem('hs-user-stats', JSON.stringify(newStats));
-        return newStats;
-      });
-    }, 1000);
-    return () => clearInterval(timer);
-  }, []);
+  const [isAccessibilityModalOpen, setIsAccessibilityModalOpen] = useState(false);
+  const [accessibilitySettings, setAccessibilitySettings] = useState<AccessibilitySettings>({
+    reduceMotion: false,
+    disableIdle: false,
+    highContrast: false,
+    hideShapes: false,
+    largeCursor: false,
+    largeText: false,
+    disableFlashes: false,
+  });
+  
+  const [githubEventTrigger, setGithubEventTrigger] = useState<GithubEventTrigger | null>(null);
+  const lastGithubEventIdRef = useRef<string | null>(null);
+
+  const [openedModals, setOpenedModals] = useState<Set<string>>(new Set());
+  const allModalTypes = useMemo(() => new Set(['help', 'achievements', 'palette', 'customTheme', 'eew']), []);
 
   const unlockAchievement = useCallback((id: string) => {
     setAchievements(prev => {
@@ -183,6 +222,121 @@ export default function App() {
         return newAchievements;
     });
   }, []);
+  
+  useEffect(() => {
+    const fetchGithubActivity = async () => {
+      try {
+        const response = await fetch('https://api.github.com/users/albertjiayou0423/events/public');
+        if (!response.ok) {
+            return; // Rate limit or other error, fail silently
+        }
+        const events = await response.json();
+        
+        const latestEvent = events.find((e: any) => e.type === 'PushEvent' || e.type === 'PullRequestEvent');
+        
+        if (latestEvent && latestEvent.id !== lastGithubEventIdRef.current) {
+            if (!lastGithubEventIdRef.current) {
+                // On first load, just store the latest ID without showing a visual
+                lastGithubEventIdRef.current = latestEvent.id;
+                return;
+            }
+            lastGithubEventIdRef.current = latestEvent.id;
+            
+            let url = '';
+            let message = '';
+            const repo = latestEvent.repo.name;
+
+            if (latestEvent.type === 'PushEvent') {
+                const commit = latestEvent.payload.commits[0];
+                if (commit) {
+                    url = `https://github.com/${repo}/commit/${commit.sha}`;
+                    message = commit.message.split('\n')[0];
+                }
+            } else if (latestEvent.type === 'PullRequestEvent' && latestEvent.payload.action === 'opened') {
+                const pr = latestEvent.payload.pull_request;
+                if (pr) {
+                    url = pr.html_url;
+                    message = pr.title;
+                }
+            }
+            
+            if (url) {
+                setGithubEventTrigger({ url, message, repo });
+            }
+        }
+      } catch (error) {
+        console.error("Failed to fetch GitHub activity:", error);
+      }
+    };
+    
+    fetchGithubActivity();
+    const intervalId = setInterval(fetchGithubActivity, 60000); // Poll every 60 seconds
+    
+    return () => clearInterval(intervalId);
+  }, []);
+
+  useEffect(() => {
+    if (openedModals.size >= allModalTypes.size) {
+        unlockAchievement('all_seeing_eye');
+    }
+  }, [openedModals, allModalTypes, unlockAchievement]);
+
+  const trackModalOpen = useCallback((modalType: string) => {
+    setOpenedModals(prev => new Set(prev).add(modalType));
+  }, []);
+
+  useEffect(() => {
+    const savedStats = localStorage.getItem('hs-user-stats');
+    if (savedStats) {
+      try {
+        const parsedStats = JSON.parse(savedStats);
+        setStats(prev => ({ ...prev, ...parsedStats }));
+      } catch (e) {
+        localStorage.removeItem('hs-user-stats');
+      }
+    }
+    const timer = setInterval(() => {
+      setStats(prev => {
+        const newStats = { ...prev, timeOnSite: prev.timeOnSite + 1 };
+        localStorage.setItem('hs-user-stats', JSON.stringify(newStats));
+        return newStats;
+      });
+    }, 1000);
+    
+    const savedA11y = localStorage.getItem('hs-a11y-settings');
+    if (savedA11y) {
+        try {
+            const parsedA11y = JSON.parse(savedA11y);
+            // Ensure all keys are present to avoid errors with older saved data
+            setAccessibilitySettings(prev => ({ ...prev, ...parsedA11y }));
+        } catch(e) { /* ignore */ }
+    }
+
+    return () => clearInterval(timer);
+  }, []);
+  
+  const handleAccessibilityChange = (newSettings: AccessibilitySettings) => {
+      setAccessibilitySettings(newSettings);
+      localStorage.setItem('hs-a11y-settings', JSON.stringify(newSettings));
+  };
+  
+  // --- NEW: Effect to apply accessibility settings to the DOM ---
+  useEffect(() => {
+    const root = document.documentElement;
+    const body = document.body;
+
+    // High Contrast
+    if (accessibilitySettings.highContrast) {
+        root.dataset.theme = 'high-contrast';
+    } else {
+        root.dataset.theme = palette;
+    }
+
+    // Large Text
+    body.classList.toggle('text-large', accessibilitySettings.largeText);
+
+  }, [accessibilitySettings, palette]);
+
 
   useEffect(() => {
     if (!currentToast && achievementUnlockQueue.length > 0) {
@@ -197,44 +351,75 @@ export default function App() {
   }, [achievementUnlockQueue, currentToast]);
 
 
-  const setCustomPalette = useCallback((color: string) => {
+  const applyCustomTheme = useCallback((theme: CustomTheme) => {
     const root = document.documentElement;
-    const primaryRgb = hexToRgb(color);
+    const primaryRgb = hexToRgb(theme.primary);
     if (!primaryRgb) return;
 
-    const homeColor = lightenHex(color, 20);
-    const homeRgb = hexToRgb(homeColor);
-    if (!homeRgb) return;
+    const accentRgb = hexToRgb(theme.accent);
+    if (!accentRgb) return;
     
-    const frostedRgb = hexToRgb(lightenHex(color, 40));
+    const frostedRgb = hexToRgb(lightenHex(theme.accent, 40));
     if (!frostedRgb) return;
 
     root.style.setProperty('--background-primary', primaryRgb);
-    root.style.setProperty('--background-home', homeRgb);
+    root.style.setProperty('--background-home', accentRgb);
     root.style.setProperty('--background-about', primaryRgb);
-    root.style.setProperty('--background-timeline', homeRgb);
+    root.style.setProperty('--background-timeline', accentRgb);
     root.style.setProperty('--background-contact', primaryRgb);
     root.style.setProperty('--background-frosted', `${frostedRgb} / 0.2`);
   }, []);
 
   useEffect(() => {
-    const savedPalette = localStorage.getItem('hs-palette') || 'slate';
-    setPalette(savedPalette);
+    // --- Theme loading logic ---
+    const urlParams = new URLSearchParams(window.location.search);
+    const themeParam = urlParams.get('theme');
 
-    if (savedPalette === 'custom') {
-        const customColor = localStorage.getItem('hs-custom-color');
-        if (customColor) {
-            setTempCustomColor(customColor);
-            setCustomPalette(customColor);
+    if (themeParam) {
+      try {
+        const decodedTheme = JSON.parse(atob(themeParam));
+        if (decodedTheme.primary && decodedTheme.accent) {
+          localStorage.setItem('hs-custom-theme', JSON.stringify(decodedTheme));
+          localStorage.setItem('hs-palette', 'custom');
+          setTempCustomTheme(decodedTheme);
+          setPalette('custom');
+          applyCustomTheme(decodedTheme);
         }
+      } catch (e) {
+        console.error("Failed to parse theme from URL", e);
+      }
+      // Clean up URL
+      window.history.replaceState({}, document.title, window.location.pathname);
+    } else {
+      const savedPalette = localStorage.getItem('hs-palette') || 'slate';
+      setPalette(savedPalette);
+
+      if (savedPalette === 'custom') {
+        const savedTheme = localStorage.getItem('hs-custom-theme');
+        if (savedTheme) {
+            try {
+                const parsedTheme = JSON.parse(savedTheme);
+                setTempCustomTheme(parsedTheme);
+                applyCustomTheme(parsedTheme);
+            } catch (e) { /* ignore */ }
+        } else {
+            // Migration from old single color system
+            const oldColor = localStorage.getItem('hs-custom-color');
+            if (oldColor) {
+                const newTheme = { primary: oldColor, accent: lightenHex(oldColor, 20) };
+                localStorage.setItem('hs-custom-theme', JSON.stringify(newTheme));
+                setTempCustomTheme(newTheme);
+                applyCustomTheme(newTheme);
+            }
+        }
+      }
     }
-    // --- NEW: Guided tour for first-time visitors ---
+
     const hasVisited = localStorage.getItem('hs-has-visited');
     if (!hasVisited) {
         setIsTourOpen(true);
-        localStorage.setItem('hs-has-visited', 'true');
     }
-  }, [setCustomPalette]);
+  }, [applyCustomTheme]);
   
   const handlePaletteChange = (newPalette: string) => {
       unlockAchievement('colorist');
@@ -244,11 +429,19 @@ export default function App() {
 
   useEffect(() => {
     const root = document.documentElement;
+    // High contrast overrides everything else
+    if (accessibilitySettings.highContrast) {
+        root.dataset.theme = 'high-contrast';
+        return;
+    }
+
     if (palette === 'custom') {
-      const customColor = localStorage.getItem('hs-custom-color');
-      if (customColor) {
-          setCustomPalette(customColor);
-      }
+        const savedTheme = localStorage.getItem('hs-custom-theme');
+        if (savedTheme) {
+            try {
+                applyCustomTheme(JSON.parse(savedTheme));
+            } catch(e) { /* ignore */ }
+        }
     } else {
       root.style.removeProperty('--background-primary');
       root.style.removeProperty('--background-home');
@@ -260,7 +453,7 @@ export default function App() {
     
     root.dataset.theme = palette;
     localStorage.setItem('hs-palette', palette);
-  }, [palette, setCustomPalette]);
+  }, [palette, applyCustomTheme, accessibilitySettings.highContrast]);
 
   const palettes = [
       { id: 'slate', name: '默认', bg: 'bg-slate-200' },
@@ -273,11 +466,26 @@ export default function App() {
       { id: 'wine-red', name: '酒红', bg: 'bg-rose-900' },
   ];
   
-  const handleSaveCustomColor = () => {
-    localStorage.setItem('hs-custom-color', tempCustomColor);
+  const handleSaveCustomTheme = () => {
+    localStorage.setItem('hs-custom-theme', JSON.stringify(tempCustomTheme));
     setPalette('custom');
     unlockAchievement('colorist');
-    setIsCustomColorModalOpen(false);
+    unlockAchievement('personalization_master');
+    setIsCustomThemeModalOpen(false);
+  };
+  
+  const handleShareTheme = () => {
+    try {
+        const themeString = JSON.stringify(tempCustomTheme);
+        const encodedTheme = btoa(themeString);
+        const url = `${window.location.origin}${window.location.pathname}?theme=${encodedTheme}`;
+        navigator.clipboard.writeText(url);
+        setShowShareToast(true);
+        setTimeout(() => setShowShareToast(false), 3000);
+        unlockAchievement('theme_architect');
+    } catch(e) {
+        console.error("Failed to share theme", e);
+    }
   };
 
   const [isIdle, setIsIdle] = useState(false);
@@ -387,7 +595,6 @@ export default function App() {
   const isScrollingRef = useRef(false);
   const scrollTimeoutRef = useRef<number | null>(null);
 
-  // --- NEW: Auto-scroll function for tour ---
   const scrollToSection = useCallback((sectionId: string) => {
       const sectionRef = sectionRefs[sectionId as keyof typeof sectionRefs];
       if (sectionRef?.current && scrollContainerRef.current) {
@@ -396,7 +603,6 @@ export default function App() {
               top: sectionRef.current.offsetTop,
               behavior: 'smooth',
           });
-          // Set a timeout to reset scrolling lock after animation
           setTimeout(() => { isScrollingRef.current = false; }, 1000);
       }
   }, [sectionRefs]);
@@ -504,8 +710,11 @@ export default function App() {
                             lastEventIdRef.current[parsedData.source] = parsedData.eventId;
                             const message = `${parsedData.hypocenter || 'N/A'} M${parsedData.magnitude || '?'} ${parsedData.intensityLabel}: ${parsedData.maxInt || 'N/A'}`;
                             setToastInfo({ id: parsedData.eventId, message, source: parsedData.source });
-                            setEewRippleKey(prev => prev + 1);
+                            if (!accessibilitySettings.disableFlashes) {
+                                setEewRippleKey(prev => prev + 1);
+                            }
                             setEarthquakeData(parsedData);
+                            trackModalOpen('eew');
                             setIsModalOpen(true);
                             setIsLoading(false);
                             setError(null);
@@ -518,7 +727,7 @@ export default function App() {
     poll();
     const intervalId = setInterval(poll, 7000);
     return () => clearInterval(intervalId);
-  }, [parseEewData]);
+  }, [parseEewData, trackModalOpen, accessibilitySettings.disableFlashes]);
 
   useEffect(() => {
     if (toastInfo) {
@@ -544,15 +753,20 @@ export default function App() {
   const progressTimeoutRef = useRef<number | null>(null);
   
   const [shapeCount, setShapeCount] = useState(0);
+  useEffect(() => {
+    if (shapeCount > 45) {
+        unlockAchievement('core_overload');
+    }
+  }, [shapeCount, unlockAchievement]);
+
   const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
   const [hoveredTimelineColor, setHoveredTimelineColor] = useState<string | null>(null);
 
   useEffect(() => {
     if (generationTrigger > 0) {
         unlockAchievement('shape_creator');
-        // --- NEW: Update stats for shapes created ---
         setStats(prev => {
-            const newStats = { ...prev, shapesCreated: prev.shapesCreated + 4 }; // Assuming 4 shapes are generated per trigger
+            const newStats = { ...prev, shapesCreated: prev.shapesCreated + 4 };
             localStorage.setItem('hs-user-stats', JSON.stringify(newStats));
             return newStats;
         });
@@ -651,14 +865,14 @@ export default function App() {
 
   const handleConfettiClick = () => {
     if (isCooldown) return;
-    setShowConfetti(true); setIsCooldown(true); unlockAchievement('confetti_cannon');
+    setShowConfetti(true); setIsCooldown(true);
     setTimeout(() => { setIsCooldown(false); }, 30000);
   };
   
   const onAnimationEnd = useCallback(() => { setShowConfetti(false); }, []);
 
   const handleEewSourceClick = async (source: 'jma' | 'sc' | 'cenc' | 'fj') => {
-    setIsModalOpen(true); setIsLoading(true); setError(null); setEarthquakeData(null); unlockAchievement('eew_discoverer');
+    setIsModalOpen(true); setIsLoading(true); setError(null); setEarthquakeData(null); unlockAchievement('eew_discoverer'); trackModalOpen('eew');
     try {
       const response = await fetch(`https://api.wolfx.jp/${source}_eew.json`);
       if (!response.ok) throw new Error('网络响应错误，请稍后重试。');
@@ -671,10 +885,12 @@ export default function App() {
   };
 
   const handleCodeCardClick = () => {
-    setIsGlitched(true);
-    setTimeout(() => setIsGlitched(false), 300);
-    // --- NEW: Open code snippet modal ---
+    if (!accessibilitySettings.disableFlashes) {
+        setIsGlitched(true);
+        setTimeout(() => setIsGlitched(false), 300);
+    }
     setIsCodeSnippetModalOpen(true);
+    unlockAchievement('code_resonance');
   };
 
   const handleDesignCardClick = () => {
@@ -705,19 +921,19 @@ export default function App() {
       const canvasConfetti = (window as any).confetti;
       if (canvasConfetti) canvasConfetti({ particleCount: 150, spread: 90, zIndex: 100 });
       clickCount.current = 0;
+      unlockAchievement('easter_egg_hunter');
     } else {
       clickTimer.current = window.setTimeout(() => { clickCount.current = 0; }, 800);
     }
   };
 
-  // --- NEW: Capture Mode Handlers ---
   const handleDownloadScreenshot = useCallback(() => {
       const mainElement = mainRef.current;
       if (mainElement && (window as any).html2canvas) {
           (window as any).html2canvas(mainElement, {
               useCORS: true,
-              backgroundColor: null, // Use transparent background
-              scale: 2, // Increase resolution
+              backgroundColor: null,
+              scale: 2,
           }).then((canvas: HTMLCanvasElement) => {
               const link = document.createElement('a');
               link.download = `huo_sai_website_${Date.now()}.png`;
@@ -731,14 +947,14 @@ export default function App() {
   const age = calculateAge(new Date('2013-01-01'));
   
   const hiddenFeatures = [
-    { icon: <SparklesIcon className="w-8 h-8 text-amber-500" />, title: "标题彩蛋", description: "连续点击主标题 “Huo_sai” 5次，触发礼花庆祝！" },
-    { icon: <CircleArrowIcon className="w-8 h-8 text-sky-500" />, title: "手势画圈", description: "在屏幕任意位置按住鼠标画一个完整的圆圈，可以生成新的形状。" },
-    { icon: <MoveIcon className="w-8 h-8 text-violet-500" />, title: "精准操控", description: "用鼠标右键点击任意形状，可以将其选中。拖动外围的圆环来改变它的飞行方向。" },
-    { icon: <MouseClickIcon className="w-8 h-8 text-rose-500" />, title: "力场交互", description: "按住鼠标左键会产生一个排斥力场，将周围的形状推开。" },
-    { icon: <MagnetIcon className="w-8 h-8 text-blue-500" />, title: "引力力场", description: "按住 Shift + 鼠标左键，可以产生一个引力场，将周围的形状吸引过来。" },
-    { icon: <PaletteIcon className="w-8 h-8 text-emerald-500" />, title: "主题切换", description: "点击右上角的调色盘图标，可以自由切换网站的背景配色方案，包括自定义颜色。" },
-    { icon: <ConstellationIcon className="w-8 h-8 text-teal-500" />, title: "智能聚集", description: "当鼠标静止2分钟后，相同颜色的形状会像家人一样，慢慢聚集在一起。" },
-    { icon: <TimelineIcon className="w-8 h-8 text-indigo-500" />, title: "时间线互动", description: "浏览“编程之旅”时，将鼠标悬停在任意时间点上，背景会变成该主题的颜色。" }
+    { icon: <Icon name="auto_awesome" className="text-amber-500" />, title: "标题彩蛋", description: "连续点击主标题 “Huo_sai” 5次，触发礼花庆祝！" },
+    { icon: <Icon name="autorenew" className="text-sky-500" />, title: "手势画圈", description: "在屏幕任意位置按住鼠标画一个完整的圆圈，可以生成新的形状。" },
+    { icon: <Icon name="open_with" className="text-violet-500" />, title: "精准操控", description: "用鼠标右键点击任意形状，可以将其选中。拖动外围的圆环来改变它的飞行方向。" },
+    { icon: <Icon name="mouse" className="text-rose-500" />, title: "力场交互", description: "按住鼠标左键会产生一个排斥力场，将周围的形状推开。" },
+    { icon: <Icon name="attractions" className="text-blue-500" />, title: "引力力场", description: "按住 Shift + 鼠标左键，可以产生一个引力场，将周围的形状吸引过来。" },
+    { icon: <Icon name="palette" className="text-emerald-500" />, title: "主题切换", description: "点击右上角的调色盘图标，可以自由切换网站的背景配色方案，包括自定义颜色。" },
+    { icon: <Icon name="hub" className="text-teal-500" />, title: "智能聚集", description: "当鼠标静止2分钟后，相同颜色的形状会像家人一样，慢慢聚集在一起。" },
+    { icon: <Icon name="timeline" className="text-indigo-500" />, title: "时间线互动", description: "浏览“编程之旅”时，将鼠标悬停在任意时间点上，背景会变成该主题的颜色。" }
   ];
   
   const timelineData = [
@@ -750,7 +966,9 @@ export default function App() {
       { year: '目标', text: '成为一名创造有趣、有用东西的工程师', color: 'bg-rose-500', hex: '#f43f5e' },
   ];
 
-  // --- REWORKED: More extensive tour refs ---
+  const aboutTitleRef = useRef<HTMLHeadingElement>(null);
+  const contactLinksRef = useRef<HTMLDivElement>(null);
+
   const tourRefs = {
       step1: useRef<HTMLHeadingElement>(null),
       step2: useRef<HTMLDivElement>(null),
@@ -760,12 +978,21 @@ export default function App() {
       step6: useRef<HTMLDivElement>(null),
       step7: useRef<HTMLButtonElement>(null),
       step8: useRef<HTMLButtonElement>(null),
+      aboutTitleRef: aboutTitleRef,
+      contactLinksRef: contactLinksRef,
   };
+
+  const mainClasses = [
+    'relative h-screen text-[rgb(var(--text-primary))] antialiased overflow-hidden',
+    isCaptureMode ? 'capture-mode' : '',
+    accessibilitySettings.largeCursor ? 'cursor-large' : '',
+    accessibilitySettings.disableFlashes ? 'no-flashing-effects' : ''
+  ].join(' ');
 
   return (
     <main 
       ref={mainRef} 
-      className={`relative h-screen text-[rgb(var(--text-primary))] antialiased overflow-hidden ${isCaptureMode ? 'capture-mode' : ''}`}
+      className={mainClasses}
     >
       <div 
         className="fixed inset-0 z-0 transition-colors duration-700 ease-in-out"
@@ -789,11 +1016,11 @@ export default function App() {
       
       <div
         ref={cursorOuterRef}
-        className="fixed pointer-events-none z-50 hide-on-capture"
+        className="fixed pointer-events-none z-[9999]"
         style={{ top: -100, left: -100 }}
       >
         <div
-          className={`w-8 h-8 rounded-full transition-all duration-200 ease-in-out ${
+          className={`w-8 h-8 rounded-full transition-all duration-200 ease-in-out hide-on-capture ${
             isHoveringLink ? 'bg-blue-400 scale-150' : mouseState.isLeftDown || mouseState.isRightDown ? 'bg-blue-400/50 scale-125' : 'bg-transparent border-2 border-blue-400'
           }`}
           style={{ transform: 'translate(-50%, -50%)' }}
@@ -810,13 +1037,18 @@ export default function App() {
       {currentToast && (
           <AchievementToast icon={currentToast.icon} title={currentToast.title} />
       )}
-
-      {/* --- NEW: Guided Tour Component --- */}
-      {isTourOpen && <GuidedTour tourRefs={tourRefs} onClose={() => setIsTourOpen(false)} scrollToSection={scrollToSection} />}
-      {/* --- NEW: Code Snippet Modal --- */}
-      {isCodeSnippetModalOpen && <CodeSnippetModal onClose={() => setIsCodeSnippetModalOpen(false)} />}
       
-      {/* --- NEW: Capture Mode UI --- */}
+      {showShareToast && (
+        <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-50 px-4 py-2 bg-slate-800 text-white text-sm font-semibold rounded-full shadow-lg animate-fade-in-out">
+            <Icon name="link" className="!text-lg mr-2" />
+            链接已复制到剪贴板！
+        </div>
+      )}
+
+      {isTourOpen && <GuidedTour tourRefs={tourRefs} onClose={() => {setIsTourOpen(false); localStorage.setItem('hs-has-visited', 'true')}} scrollToSection={scrollToSection} />}
+      {isCodeSnippetModalOpen && <CodeSnippetModal onClose={() => setIsCodeSnippetModalOpen(false)} />}
+      {isAccessibilityModalOpen && <AccessibilityModal settings={accessibilitySettings} onSettingsChange={handleAccessibilityChange} onClose={() => setIsAccessibilityModalOpen(false)} />}
+      
       {isCaptureMode && (
         <div className="fixed inset-0 z-[1001] bg-black/50 flex flex-col items-center justify-center gap-6 animate-fadeIn">
             <h2 className="text-3xl font-bold text-white">定格艺术</h2>
@@ -842,17 +1074,21 @@ export default function App() {
          <ProgrammerDayCountdown />
       </div>
       
-      <BackgroundShapes 
+      {!accessibilitySettings.hideShapes && <BackgroundShapes 
         obstacles={obstacles} 
         onUiCollision={handleUiCollision} 
         generationTrigger={generationTrigger}
         mouseState={mouseState}
         onShapeCountChange={setShapeCount}
-        isIdle={isIdle}
+        isIdle={isIdle && !accessibilitySettings.disableIdle}
         hoveredTimelineColor={hoveredTimelineColor}
         activeSection={activeSection}
-        isPaused={isCaptureMode}
-      />
+        isPaused={isCaptureMode || accessibilitySettings.reduceMotion}
+        onShapeRedirected={() => unlockAchievement('precision_guidance')}
+        onShapePushedOffscreen={() => unlockAchievement('mighty_push')}
+        onPairFormed={() => unlockAchievement('hand_in_hand')}
+        githubEventTrigger={githubEventTrigger}
+      />}
       
       {Object.entries(uiIndicators).map(([id, indicator]) => (
           <div key={id} className="ui-indicator-segment hide-on-capture" style={indicator.style} />
@@ -860,46 +1096,44 @@ export default function App() {
       
       {toastInfo && (
         <div className="fixed top-5 right-5 z-50 w-full max-w-sm bg-[rgb(var(--background-card))] backdrop-blur-md rounded-lg shadow-lg pointer-events-auto ring-1 ring-[rgb(var(--ring-primary))] overflow-hidden animate-toast-in-right hide-on-capture">
-          <div className="p-4"><div className="flex items-start"><div className="flex-shrink-0 pt-0.5"><EarthquakeIcon className="h-6 w-6 text-blue-600" /></div><div className="ml-3 w-0 flex-1"><p className="text-sm font-semibold text-[rgb(var(--text-primary))]">新地震速报 ({toastInfo.source})</p><p className="mt-1 text-sm text-[rgb(var(--text-tertiary))]">{toastInfo.message}</p></div><div className="ml-4 flex-shrink-0 flex"><button onClick={() => { setToastInfo(null); }} className="inline-flex text-[rgb(var(--text-quaternary))] rounded-md hover:text-[rgb(var(--text-tertiary))] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"><span className="sr-only">Close</span><svg className="h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" /></svg></button></div></div></div>
+          <div className="p-4"><div className="flex items-start"><div className="flex-shrink-0 pt-0.5"><Icon name="earthquake" className="text-blue-600 !text-2xl" /></div><div className="ml-3 w-0 flex-1"><p className="text-sm font-semibold text-[rgb(var(--text-primary))]">新地震速报 ({toastInfo.source})</p><p className="mt-1 text-sm text-[rgb(var(--text-tertiary))]">{toastInfo.message}</p></div><div className="ml-4 flex-shrink-0 flex"><button onClick={() => { setToastInfo(null); }} className="inline-flex text-[rgb(var(--text-quaternary))] rounded-md hover:text-[rgb(var(--text-tertiary))] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"><span className="sr-only">Close</span><Icon name="close" className="!text-xl" /></button></div></div></div>
         </div>
       )}
       
-      {/* Control Buttons Container */}
       <div className="fixed bottom-4 left-4 z-40 flex items-center gap-4 hide-on-capture">
         <button onClick={handleConfettiClick} disabled={isCooldown} className={`p-3 bg-[rgb(var(--background-button))] rounded-full shadow-lg backdrop-blur-sm transition-all duration-200 pointer-events-auto ${isCooldown ? 'opacity-50' : 'hover:scale-110'}`} aria-label="撒花" onMouseDown={() => !isCooldown} onMouseEnter={() => { if (!isCooldown) { setIsHoveringLink(true); } }} onMouseLeave={() => setIsHoveringLink(false)} data-obstacle="true" data-id="confetti-button">
-          {isCooldown ? <ClockIcon className="w-6 h-6 text-[rgb(var(--text-tertiary))]" /> : <PartyPopperIcon className="w-6 h-6 text-rose-500" />}
+          {isCooldown ? <Icon name="schedule" className="text-[rgb(var(--text-tertiary))]" /> : <Icon name="celebration" className="text-rose-500" />}
         </button>
-        <button onClick={() => { setIsHelpModalOpen(true); unlockAchievement('secret_revealer'); }} className="p-3 bg-[rgb(var(--background-button))] rounded-full shadow-lg backdrop-blur-sm transition-all duration-200 hover:scale-110 pointer-events-auto" aria-label="帮助" onMouseEnter={() => { setIsHoveringLink(true); }} onMouseLeave={() => setIsHoveringLink(false)} data-obstacle="true" data-id="help-button">
-          <HelpIcon className="w-6 h-6 text-[rgb(var(--text-secondary))]" />
+        <button onClick={() => { setIsHelpModalOpen(true); unlockAchievement('secret_revealer'); trackModalOpen('help'); }} className="p-3 bg-[rgb(var(--background-button))] rounded-full shadow-lg backdrop-blur-sm transition-all duration-200 hover:scale-110 pointer-events-auto" aria-label="帮助" onMouseEnter={() => { setIsHoveringLink(true); }} onMouseLeave={() => setIsHoveringLink(false)} data-obstacle="true" data-id="help-button">
+          <Icon name="help" className="text-[rgb(var(--text-secondary))]" />
         </button>
-        <button ref={tourRefs.step7} onClick={() => { setIsAchievementsModalOpen(true); }} className="p-3 bg-[rgb(var(--background-button))] rounded-full shadow-lg backdrop-blur-sm transition-all duration-200 hover:scale-110 pointer-events-auto" aria-label="成就" onMouseEnter={() => { setIsHoveringLink(true); }} onMouseLeave={() => setIsHoveringLink(false)} data-obstacle="true" data-id="achievements-button">
-          <TrophyIcon className="w-6 h-6 text-amber-500" />
+        <button ref={tourRefs.step7} onClick={() => { setIsAchievementsModalOpen(true); trackModalOpen('achievements'); }} className="p-3 bg-[rgb(var(--background-button))] rounded-full shadow-lg backdrop-blur-sm transition-all duration-200 hover:scale-110 pointer-events-auto" aria-label="成就" onMouseEnter={() => { setIsHoveringLink(true); }} onMouseLeave={() => setIsHoveringLink(false)} data-obstacle="true" data-id="achievements-button">
+          <Icon name="emoji_events" className="text-amber-500" />
         </button>
-        {/* --- NEW: Capture Button --- */}
         <button ref={tourRefs.step8} onClick={() => setIsCaptureMode(true)} className="p-3 bg-[rgb(var(--background-button))] rounded-full shadow-lg backdrop-blur-sm transition-all duration-200 hover:scale-110 pointer-events-auto" aria-label="截图" onMouseEnter={() => { setIsHoveringLink(true); }} onMouseLeave={() => setIsHoveringLink(false)} data-obstacle="true" data-id="capture-button">
-            <CameraIcon className="w-6 h-6 text-indigo-500" />
+            <Icon name="photo_camera" className="text-indigo-500" />
         </button>
       </div>
 
-      <button ref={tourRefs.step3} className="fixed top-4 right-4 z-40 p-3 bg-[rgb(var(--background-button))] rounded-full shadow-lg backdrop-blur-sm transition-all duration-200 hover:scale-110 pointer-events-auto hide-on-capture" aria-label="Toggle Theme" onClick={() => { setIsPaletteModalOpen(true); }} onMouseEnter={() => { setIsHoveringLink(true); }} onMouseLeave={() => setIsHoveringLink(false)} data-obstacle="true" data-id="theme-button">
-          <PaletteIcon className="w-6 h-6 text-[rgb(var(--text-secondary))]" />
+      <button ref={tourRefs.step3} className="fixed top-4 right-4 z-40 p-3 bg-[rgb(var(--background-button))] rounded-full shadow-lg backdrop-blur-sm transition-all duration-200 hover:scale-110 pointer-events-auto hide-on-capture" aria-label="Toggle Theme" onClick={() => { setIsPaletteModalOpen(true); trackModalOpen('palette'); }} onMouseEnter={() => { setIsHoveringLink(true); }} onMouseLeave={() => setIsHoveringLink(false)} data-obstacle="true" data-id="theme-button">
+          <Icon name="palette" className="text-[rgb(var(--text-secondary))]" />
       </button>
 
       {isPaletteModalOpen && (
-        <div className="fixed inset-0 z-40 flex items-center justify-center p-4 pointer-events-auto"><div className="absolute inset-0 bg-black/40 animate-fadeIn" onClick={() => { setIsPaletteModalOpen(false); }}></div><div className="relative flex flex-col items-center gap-4 bg-[rgb(var(--background-card))] p-6 sm:p-8 rounded-lg border border-[rgb(var(--border-primary))] shadow-lg text-left animate-scaleUp"><h3 className="text-lg font-semibold text-[rgb(var(--text-secondary))]">选择背景</h3><div className="grid grid-cols-4 sm:grid-cols-4 gap-4">{palettes.map(p => (<button key={p.id} onClick={() => handlePaletteChange(p.id)} onMouseEnter={() => { setIsHoveringLink(true); }} onMouseLeave={() => setIsHoveringLink(false)} className={`flex flex-col items-center gap-2 p-2 rounded-md transition-all ${palette === p.id ? 'ring-2 ring-blue-500' : 'hover:bg-slate-500/10'}`}><div className={`w-10 h-10 rounded-full ${p.bg}`}></div><span className="text-xs text-[rgb(var(--text-tertiary))]">{p.name}</span></button>))} <button onClick={() => { setIsPaletteModalOpen(false); setIsCustomColorModalOpen(true); }} onMouseEnter={() => { setIsHoveringLink(true); }} onMouseLeave={() => setIsHoveringLink(false)} className={`flex flex-col items-center gap-2 p-2 rounded-md transition-all ${palette === 'custom' ? 'ring-2 ring-blue-500' : 'hover:bg-slate-500/10'}`}><div className="w-10 h-10 rounded-full bg-gradient-to-br from-red-400 via-yellow-400 to-blue-400"></div><span className="text-xs text-[rgb(var(--text-tertiary))]">自定义</span></button></div></div></div>
+        <div className="fixed inset-0 z-40 flex items-center justify-center p-4 pointer-events-auto"><div className="absolute inset-0 bg-black/40 animate-fadeIn" onClick={() => { setIsPaletteModalOpen(false); }}></div><div className="relative flex flex-col items-center gap-4 bg-[rgb(var(--background-card))] p-6 sm:p-8 rounded-lg border border-[rgb(var(--border-primary))] shadow-lg text-left animate-scaleUp"><h3 className="text-lg font-semibold text-[rgb(var(--text-secondary))]">选择背景</h3><div className="grid grid-cols-4 sm:grid-cols-4 gap-4">{palettes.map(p => (<button key={p.id} onClick={() => handlePaletteChange(p.id)} onMouseEnter={() => { setIsHoveringLink(true); }} onMouseLeave={() => setIsHoveringLink(false)} className={`flex flex-col items-center gap-2 p-2 rounded-md transition-all ${palette === p.id ? 'ring-2 ring-blue-500' : 'hover:bg-slate-500/10'}`}><div className={`w-10 h-10 rounded-full ${p.bg}`}></div><span className="text-xs text-[rgb(var(--text-tertiary))]">{p.name}</span></button>))} <button onClick={() => { setIsPaletteModalOpen(false); setIsCustomThemeModalOpen(true); trackModalOpen('customTheme'); }} onMouseEnter={() => { setIsHoveringLink(true); }} onMouseLeave={() => setIsHoveringLink(false)} className={`flex flex-col items-center gap-2 p-2 rounded-md transition-all ${palette === 'custom' ? 'ring-2 ring-blue-500' : 'hover:bg-slate-500/10'}`}><div className="w-10 h-10 rounded-full bg-gradient-to-br from-red-400 via-yellow-400 to-blue-400"></div><span className="text-xs text-[rgb(var(--text-tertiary))]">自定义</span></button></div></div></div>
       )}
       
-      {isCustomColorModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-auto"><div className="absolute inset-0 bg-black/40 animate-fadeIn" onClick={() => setIsCustomColorModalOpen(false)}></div><div className="relative flex flex-col items-center gap-6 bg-[rgb(var(--background-card))] p-6 sm:p-8 rounded-lg border border-[rgb(var(--border-primary))] shadow-lg text-left animate-scaleUp"><h3 className="text-lg font-semibold text-[rgb(var(--text-secondary))]">自定义背景颜色</h3><div className="flex items-center justify-center gap-4"><input type="color" value={tempCustomColor} onChange={(e) => setTempCustomColor(e.target.value)} className="w-16 h-16 p-0 border-none rounded-md" /><div className="flex flex-col"><span className="text-sm text-[rgb(var(--text-quaternary))]">当前颜色</span><span className="font-mono text-lg text-[rgb(var(--text-secondary))]">{tempCustomColor}</span></div></div><button onClick={handleSaveCustomColor} onMouseEnter={() => { setIsHoveringLink(true); }} onMouseLeave={() => setIsHoveringLink(false)} className="px-6 py-2 bg-blue-500 text-white font-semibold rounded-md hover:bg-blue-600 transition-colors">保存</button></div></div>
+      {isCustomThemeModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-auto"><div className="absolute inset-0 bg-black/40 animate-fadeIn" onClick={() => setIsCustomThemeModalOpen(false)}></div><div className="relative flex flex-col items-center gap-6 bg-[rgb(var(--background-card))] p-6 sm:p-8 rounded-lg border border-[rgb(var(--border-primary))] shadow-lg text-left animate-scaleUp"><h3 className="text-lg font-semibold text-[rgb(var(--text-secondary))] mb-2">自定义主题</h3><div className="grid grid-cols-2 gap-6"><div className="flex flex-col items-center gap-2"><label htmlFor="primary-color" className="text-sm text-[rgb(var(--text-tertiary))]">主背景</label><input type="color" id="primary-color" value={tempCustomTheme.primary} onChange={(e) => setTempCustomTheme(t => ({...t, primary: e.target.value}))} className="w-20 h-20 p-0 border-none rounded-md" /></div><div className="flex flex-col items-center gap-2"><label htmlFor="accent-color" className="text-sm text-[rgb(var(--text-tertiary))]">强调背景</label><input type="color" id="accent-color" value={tempCustomTheme.accent} onChange={(e) => setTempCustomTheme(t => ({...t, accent: e.target.value}))} className="w-20 h-20 p-0 border-none rounded-md" /></div></div><div className="flex items-center gap-4 mt-4"><button onClick={handleSaveCustomTheme} onMouseEnter={() => { setIsHoveringLink(true); }} onMouseLeave={() => setIsHoveringLink(false)} className="px-5 py-2 bg-blue-500 text-white font-semibold rounded-md hover:bg-blue-600 transition-colors">保存</button><button onClick={handleShareTheme} onMouseEnter={() => { setIsHoveringLink(true); }} onMouseLeave={() => setIsHoveringLink(false)} className="px-5 py-2 bg-slate-500/20 text-[rgb(var(--text-secondary))] font-semibold rounded-md hover:bg-slate-500/30 transition-colors flex items-center gap-2"><Icon name="share" className="!text-lg" /> 分享</button></div></div></div>
       )}
       
       {isHelpModalOpen && (
-        <div className="fixed inset-0 z-40 flex items-center justify-center p-4 pointer-events-auto"><div className="absolute inset-0 bg-black/40 animate-fadeIn" onClick={() => setIsHelpModalOpen(false)}></div><div className="relative w-full max-w-4xl bg-[rgb(var(--background-card))] p-6 sm:p-8 rounded-lg border border-[rgb(var(--border-primary))] shadow-lg text-left animate-scaleUp"><button onClick={() => { setIsHelpModalOpen(false); }} className="absolute top-4 right-4 text-[rgb(var(--text-quaternary))] hover:text-[rgb(var(--text-tertiary))] transition-colors" aria-label="关闭"><svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg></button><h2 className="text-2xl font-bold tracking-tight mb-6 text-center text-[rgb(var(--text-secondary))]">隐藏功能说明</h2><div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">{hiddenFeatures.map((feature, index) => (<div key={index} className="bg-slate-400/10 p-4 rounded-lg flex flex-col items-center text-center backdrop-blur-sm"><div className="flex-shrink-0 mb-3">{feature.icon}</div><h3 className="text-md font-semibold text-[rgb(var(--text-secondary))] mb-1">{feature.title}</h3><p className="text-sm text-[rgb(var(--text-tertiary))]">{feature.description}</p></div>))}</div></div></div>
+        <div className="fixed inset-0 z-40 flex items-center justify-center p-4 pointer-events-auto"><div className="absolute inset-0 bg-black/40 animate-fadeIn" onClick={() => setIsHelpModalOpen(false)}></div><div className="relative w-full max-w-4xl bg-[rgb(var(--background-card))] p-6 sm:p-8 rounded-lg border border-[rgb(var(--border-primary))] shadow-lg text-left animate-scaleUp"><button onClick={() => { setIsHelpModalOpen(false); }} className="absolute top-4 right-4 text-[rgb(var(--text-quaternary))] hover:text-[rgb(var(--text-tertiary))] transition-colors" aria-label="关闭"><Icon name="close" /></button><h2 className="text-2xl font-bold tracking-tight mb-6 text-center text-[rgb(var(--text-secondary))]">隐藏功能说明</h2><div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">{hiddenFeatures.map((feature, index) => (<div key={index} className="bg-slate-400/10 p-4 rounded-lg flex flex-col items-center text-center backdrop-blur-sm"><div className="flex-shrink-0 mb-3 text-4xl">{feature.icon}</div><h3 className="text-md font-semibold text-[rgb(var(--text-secondary))] mb-1">{feature.title}</h3><p className="text-sm text-[rgb(var(--text-tertiary))]">{feature.description}</p></div>))}</div><div className="mt-6 pt-4 border-t border-[rgb(var(--border-primary))] flex flex-wrap justify-end items-center gap-4"><button onClick={() => { setIsHelpModalOpen(false); setIsAccessibilityModalOpen(true); }} className="help-modal-button"><Icon name="accessibility" /><span>无障碍设定</span></button><button onClick={() => { setIsHelpModalOpen(false); setIsTourOpen(true); }} className="help-modal-button"><Icon name="tour" /><span>开始引导</span></button></div></div></div>
       )}
 
       {isAchievementsModalOpen && (<AchievementsModal achievements={achievements} onClose={() => setIsAchievementsModalOpen(false)} />)}
 
-      {shapeCount > 45 && (
+      {shapeCount > 45 && !accessibilitySettings.hideShapes && (
          <div className="fixed bottom-4 right-4 z-[51] flex items-center gap-3 px-4 py-3 bg-[rgb(var(--background-button-refresh))] rounded-full shadow-lg backdrop-blur-md ring-1 ring-[rgb(var(--ring-primary))] transition-all duration-200 animate-slide-up-fade-in pointer-events-auto hide-on-capture" data-obstacle="true" data-id="refresh-prompt">
             <span className="text-sm text-[rgb(var(--text-secondary))] font-medium">是不是有点卡了？刷新一下试试吧</span>
          </div>
@@ -914,23 +1148,23 @@ export default function App() {
             <p className="mt-4 text-lg sm:text-xl text-[rgb(var(--text-tertiary))] tracking-wide">{welcomeBackMessage || dailyGreeting}</p>
             <p className="mt-2 text-base text-[rgb(var(--text-quaternary))]">({age}岁)</p>
           </div>
-          <div className={`absolute bottom-6 left-1/2 -translate-x-1/2 transition-opacity duration-500 pointer-events-auto z-30 ${hasScrolled ? 'opacity-0' : ''}`} aria-hidden="true"><div className="text-[rgb(var(--text-quaternary))]"><p className="mb-2 text-xs tracking-wider">滚动浏览</p><svg className="w-6 h-6 mx-auto animate-bounce-slow" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 17l-4 4m0 0l-4-4m4 4V3" /></svg></div></div>
+          <div className={`absolute bottom-6 left-1/2 -translate-x-1/2 transition-opacity duration-500 pointer-events-auto z-30 ${hasScrolled ? 'opacity-0' : ''}`} aria-hidden="true"><div className="text-[rgb(var(--text-quaternary))]"><p className="mb-2 text-xs tracking-wider">滚动浏览</p><Icon name="south" className="mx-auto animate-bounce-slow" /></div></div>
         </section>
 
         <section ref={aboutRef} id="about" className="h-screen w-full snap-start flex flex-col items-center justify-center p-4 sm:p-8">
           <div className="relative w-full max-w-4xl text-center pointer-events-auto z-30">
-            <h2 className="text-4xl sm:text-5xl font-bold tracking-tight mb-12 text-[rgb(var(--text-secondary))]" data-obstacle="true" data-id="about-title">关于我</h2>
+            <h2 ref={aboutTitleRef} className="text-4xl sm:text-5xl font-bold tracking-tight mb-12 text-[rgb(var(--text-secondary))]" data-obstacle="true" data-id="about-title">关于我</h2>
             <div ref={tourRefs.step4} className="grid grid-cols-1 md:grid-cols-3 gap-8 text-left" data-obstacle="true" data-id="about-cards">
               <div className="bg-[rgb(var(--background-card))] p-6 rounded-lg border border-[rgb(var(--border-primary))] shadow-sm transition-transform hover:scale-105 duration-300 pointer-events-auto" onClick={handleCodeCardClick} role="button" tabIndex={0} onKeyDown={(e) => e.key === 'Enter' && handleCodeCardClick()} onMouseEnter={() => { setIsHoveringLink(true); }} onMouseLeave={() => setIsHoveringLink(false)}>
-                <div className="flex items-center gap-4"><div className="bg-blue-100 p-3 rounded-full flex-shrink-0"><CodeIcon className="w-6 h-6 text-blue-600" /></div><h3 className="text-xl font-semibold text-[rgb(var(--text-secondary))]">编程</h3></div>
+                <div className="flex items-center gap-4"><div className="bg-blue-100 p-3 rounded-full flex-shrink-0"><Icon name="code" className="text-blue-600" /></div><h3 className="text-xl font-semibold text-[rgb(var(--text-secondary))]">编程</h3></div>
                 <p className={`mt-4 text-[rgb(var(--text-tertiary))] ${isGlitched ? 'animate-glitch' : ''}`}>主修 C++，享受用代码构建逻辑和解决问题的过程。</p>
               </div>
               <div className="bg-[rgb(var(--background-card))] p-6 rounded-lg border border-[rgb(var(--border-primary))] shadow-sm transition-transform duration-300 pointer-events-auto">
-                <div className="flex items-center gap-4 mb-4"><div className="bg-red-100 p-3 rounded-full flex-shrink-0"><ZapIcon className="w-6 h-6 text-red-600" /></div><h3 className="text-xl font-semibold text-[rgb(var(--text-secondary))]">EEW</h3></div>
+                <div className="flex items-center gap-4 mb-4"><div className="bg-red-100 p-3 rounded-full flex-shrink-0"><Icon name="bolt" className="text-red-600" /></div><h3 className="text-xl font-semibold text-[rgb(var(--text-secondary))]">EEW</h3></div>
                 <div ref={tourRefs.step5}><div className="grid grid-cols-2 gap-2 text-center"><button onClick={() => handleEewSourceClick('jma')} onMouseEnter={() => { setIsHoveringLink(true); }} onMouseLeave={() => setIsHoveringLink(false)} className="text-sm bg-red-500/10 text-red-700 font-semibold py-2 px-2 rounded-md hover:bg-red-500/20 transition-colors">日本(JMA)</button><button onClick={() => handleEewSourceClick('sc')} onMouseEnter={() => { setIsHoveringLink(true); }} onMouseLeave={() => setIsHoveringLink(false)} className="text-sm bg-blue-500/10 text-blue-700 font-semibold py-2 px-2 rounded-md hover:bg-blue-500/20 transition-colors">四川</button><button onClick={() => handleEewSourceClick('cenc')} onMouseEnter={() => { setIsHoveringLink(true); }} onMouseLeave={() => setIsHoveringLink(false)} className="text-sm bg-green-500/10 text-green-700 font-semibold py-2 px-2 rounded-md hover:bg-green-500/20 transition-colors">中国(CENC)</button><button onClick={() => handleEewSourceClick('fj')} onMouseEnter={() => { setIsHoveringLink(true); }} onMouseLeave={() => setIsHoveringLink(false)} className="text-sm bg-amber-500/10 text-amber-700 font-semibold py-2 px-2 rounded-md hover:bg-amber-500/20 transition-colors">福建</button></div></div>
               </div>
               <div className="bg-[rgb(var(--background-card))] p-6 rounded-lg border border-[rgb(var(--border-primary))] shadow-sm transition-transform hover:scale-105 duration-300 pointer-events-auto" onClick={handleDesignCardClick} role="button" tabIndex={0} onKeyDown={(e) => e.key === 'Enter' && handleDesignCardClick()} onMouseEnter={() => { setIsHoveringLink(true); }} onMouseLeave={() => setIsHoveringLink(false)}>
-                <div className="flex items-center gap-4"><div className={`p-3 rounded-full flex-shrink-0 transition-colors duration-300 ${designColors[designColorIndex].bg}`}><DesignIcon className={`w-6 h-6 transition-colors duration-300 ${designColors[designColorIndex].text}`} /></div><h3 className="text-xl font-semibold text-[rgb(var(--text-secondary))]">设计</h3></div>
+                <div className="flex items-center gap-4"><div className={`p-3 rounded-full flex-shrink-0 transition-colors duration-300 ${designColors[designColorIndex].bg}`}><Icon name="design_services" className={`transition-colors duration-300 ${designColors[designColorIndex].text}`} /></div><h3 className="text-xl font-semibold text-[rgb(var(--text-secondary))]">设计</h3></div>
                 <p className="mt-4 text-[rgb(var(--text-tertiary))]">热爱简洁、明快的设计风格，相信“少即是多”。</p>
               </div>
             </div>
@@ -944,17 +1178,16 @@ export default function App() {
         <section ref={contactRef} id="contact" className="h-screen w-full snap-start flex flex-col items-center justify-center p-4 sm:p-8">
           <div className="relative w-full max-w-4xl text-center pointer-events-auto z-30">
             <h2 className="text-4xl sm:text-5xl font-bold tracking-tight mb-8 text-[rgb(var(--text-secondary))]" data-obstacle="true" data-id="contact-title">联系我</h2>
-            <div className="flex justify-center items-center gap-8 pointer-events-auto" data-obstacle="true" data-id="contact-links">
-              <a href="mailto:albert.tang_1a@hotmail.com" className="group" onMouseEnter={() => { setIsHoveringLink(true); }} onMouseLeave={() => setIsHoveringLink(false)}><div className="flex flex-col items-center gap-2"><MailIcon className="w-10 h-10 text-[rgb(var(--text-quaternary))] group-hover:text-[rgb(var(--text-link-hover))] transition-colors" /><span className="text-[rgb(var(--text-tertiary))] group-hover:text-[rgb(var(--text-link-hover))] transition-colors">邮箱</span><p className="text-sm text-[rgb(var(--text-quaternary))] mt-1">albert.tang_1a@hotmail.com</p></div></a>
-              <a href="https://github.com/albertjiayou0423" target="_blank" rel="noopener noreferrer" className="group" onMouseEnter={() => { setIsHoveringLink(true); }} onMouseLeave={() => setIsHoveringLink(false)}><div className="flex flex-col items-center gap-2"><GithubIcon className="w-10 h-10 text-[rgb(var(--text-quaternary))] group-hover:text-[rgb(var(--text-link-gh-hover))] transition-colors" /><span className="text-[rgb(var(--text-tertiary))] group-hover:text-[rgb(var(--text-link-gh-hover))] transition-colors">GitHub</span><p className="text-sm text-[rgb(var(--text-quaternary))] mt-1">albertjiayou0423</p></div></a>
+            <div ref={contactLinksRef} className="flex justify-center items-center gap-8 pointer-events-auto" data-obstacle="true" data-id="contact-links">
+              <a href="mailto:albert.tang_1a@hotmail.com" className="group" onMouseEnter={() => { setIsHoveringLink(true); }} onMouseLeave={() => setIsHoveringLink(false)}><div className="flex flex-col items-center gap-2"><Icon name="mail" className="text-4xl text-[rgb(var(--text-quaternary))] group-hover:text-[rgb(var(--text-link-hover))] transition-colors" /><span className="text-[rgb(var(--text-tertiary))] group-hover:text-[rgb(var(--text-link-hover))] transition-colors">邮箱</span><p className="text-sm text-[rgb(var(--text-quaternary))] mt-1">albert.tang_1a@hotmail.com</p></div></a>
+              <a href="https://github.com/albertjiayou0423" target="_blank" rel="noopener noreferrer" className="group" onMouseEnter={() => { setIsHoveringLink(true); }} onMouseLeave={() => setIsHoveringLink(false)}><div className="flex flex-col items-center gap-2"><Icon name="github-original" provider="devicon" className="text-4xl text-[rgb(var(--text-quaternary))] group-hover:text-[rgb(var(--text-link-gh-hover))] transition-colors" /><span className="text-[rgb(var(--text-tertiary))] group-hover:text-[rgb(var(--text-link-gh-hover))] transition-colors">GitHub</span><p className="text-sm text-[rgb(var(--text-quaternary))] mt-1">albertjiayou0423</p></div></a>
             </div>
-            {/* --- NEW: Stats Dashboard --- */}
             <StatsDashboard stats={stats} achievementsUnlocked={achievements.filter(a => a.unlocked).length} totalAchievements={achievements.length} />
           </div>
         </section>
 
         {isModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-auto"><div className="absolute inset-0 bg-black/50 animate-fadeIn" onClick={() => { setIsModalOpen(false); }}></div><div className="relative bg-[rgb(var(--background-card))] rounded-lg shadow-xl w-full max-w-md text-left overflow-hidden animate-scaleUp"><div className="bg-blue-500 text-white p-4 flex justify-between items-center"><div className="flex items-center gap-3"><ZapIcon className="w-6 h-6" /><h3 className="text-lg font-semibold">最新地震速报 ({earthquakeData?.source || ''})</h3></div></div><div className="p-6">{isLoading && <p className="text-[rgb(var(--text-tertiary))]">加载中...</p>}{error && <p className="text-[rgb(var(--text-tertiary))]">{error}</p>}{earthquakeData && (<div><div className="grid grid-cols-2 gap-4 mb-6 text-center"><div><p className="text-sm text-[rgb(var(--text-quaternary))]">{earthquakeData.intensityLabel || '最大烈度'}</p><p className="text-5xl font-bold text-[rgb(var(--text-primary))]">{earthquakeData.maxInt || 'N/A'}</p></div><div><p className="text-sm text-[rgb(var(--text-quaternary))]">震级</p><p className="text-5xl font-bold text-[rgb(var(--text-primary))]">{earthquakeData.magnitude ? `M${earthquakeData.magnitude}` : 'N/A'}</p></div></div><ul className="space-y-2 text-sm text-[rgb(var(--text-secondary))] border-t border-[rgb(var(--border-primary))] pt-4"><li><strong>震源地:</strong> {earthquakeData.hypocenter}</li>{earthquakeData.depth !== 'N/A' && <li><strong>深度:</strong> {earthquakeData.depth}</li>}<li><strong>发生时间:</strong> {earthquakeData.originTime}</li><li><strong>发布时间:</strong> {earthquakeData.reportTime}</li>{earthquakeData.tsunamiInfo && <li><strong>海啸情报:</strong> {earthquakeData.tsunamiInfo}</li>}{typeof earthquakeData.isFinal === 'boolean' && <li><strong>最终报:</strong> {earthquakeData.isFinal ? '是' : '否'}</li>}{typeof earthquakeData.isCancel === 'boolean' && <li className="font-bold text-red-500"><strong>取消报:</strong> {earthquakeData.isCancel ? '是' : '否'}</li>}<li className="text-xs text-[rgb(var(--text-quaternary))] pt-2">Event ID: {earthquakeData.eventId}</li></ul></div>)}</div><div className="px-6 pb-6 text-right"><button type="button" className="inline-flex justify-center rounded-md border border-transparent bg-blue-100 px-4 py-2 text-sm font-medium text-blue-900 hover:bg-blue-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2" onClick={() => { setIsModalOpen(false); }} onMouseEnter={() => { setIsHoveringLink(true); }} onMouseLeave={() => setIsHoveringLink(false)}>关闭</button></div></div></div>
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-auto"><div className="absolute inset-0 bg-black/50 animate-fadeIn" onClick={() => { setIsModalOpen(false); }}></div><div className="relative bg-[rgb(var(--background-card))] rounded-lg shadow-xl w-full max-w-md text-left overflow-hidden animate-scaleUp"><div className="bg-blue-500 text-white p-4 flex justify-between items-center"><div className="flex items-center gap-3"><Icon name="bolt" /> <h3 className="text-lg font-semibold">最新地震速报 ({earthquakeData?.source || ''})</h3></div></div><div className="p-6">{isLoading && <p className="text-[rgb(var(--text-tertiary))]">加载中...</p>}{error && <p className="text-[rgb(var(--text-tertiary))]">{error}</p>}{earthquakeData && (<div><div className="grid grid-cols-2 gap-4 mb-6 text-center"><div><p className="text-sm text-[rgb(var(--text-quaternary))]">{earthquakeData.intensityLabel || '最大烈度'}</p><p className="text-5xl font-bold text-[rgb(var(--text-primary))]">{earthquakeData.maxInt || 'N/A'}</p></div><div><p className="text-sm text-[rgb(var(--text-quaternary))]">震级</p><p className="text-5xl font-bold text-[rgb(var(--text-primary))]">{earthquakeData.magnitude ? `M${earthquakeData.magnitude}` : 'N/A'}</p></div></div><ul className="space-y-2 text-sm text-[rgb(var(--text-secondary))] border-t border-[rgb(var(--border-primary))] pt-4"><li><strong>震源地:</strong> {earthquakeData.hypocenter}</li>{earthquakeData.depth !== 'N/A' && <li><strong>深度:</strong> {earthquakeData.depth}</li>}<li><strong>发生时间:</strong> {earthquakeData.originTime}</li><li><strong>发布时间:</strong> {earthquakeData.reportTime}</li>{earthquakeData.tsunamiInfo && <li><strong>海啸情报:</strong> {earthquakeData.tsunamiInfo}</li>}{typeof earthquakeData.isFinal === 'boolean' && <li><strong>最终报:</strong> {earthquakeData.isFinal ? '是' : '否'}</li>}{typeof earthquakeData.isCancel === 'boolean' && <li className="font-bold text-red-500"><strong>取消报:</strong> {earthquakeData.isCancel ? '是' : '否'}</li>}<li className="text-xs text-[rgb(var(--text-quaternary))] pt-2">Event ID: {earthquakeData.eventId}</li></ul></div>)}</div><div className="px-6 pb-6 text-right"><button type="button" className="inline-flex justify-center rounded-md border border-transparent bg-blue-100 px-4 py-2 text-sm font-medium text-blue-900 hover:bg-blue-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2" onClick={() => { setIsModalOpen(false); }} onMouseEnter={() => { setIsHoveringLink(true); }} onMouseLeave={() => setIsHoveringLink(false)}>关闭</button></div></div></div>
         )}
       </div>
     </main>
