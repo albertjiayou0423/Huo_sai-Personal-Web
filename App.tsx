@@ -1,10 +1,7 @@
-
-
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import BackgroundShapes from './components/BackgroundShapes';
-import Confetti from './components/Confetti';
 import ProgrammerDayCountdown from './components/ProgrammerDayCountdown';
-import { CodeIcon, DesignIcon, GithubIcon, MailIcon, ZapIcon, EarthquakeIcon, PartyPopperIcon, ClockIcon, PaletteIcon, HelpIcon, SparklesIcon, CircleArrowIcon, MoveIcon, MouseClickIcon, MagnetIcon, ConstellationIcon, TimelineIcon } from './components/Icons';
+import { CodeIcon, DesignIcon, GithubIcon, MailIcon, ZapIcon, EarthquakeIcon, PaletteIcon, HelpIcon, SparklesIcon, CircleArrowIcon, MoveIcon, MouseClickIcon, MagnetIcon, ConstellationIcon, TimelineIcon } from './components/Icons';
 import { useDailyGreeting } from './hooks/useDailyGreeting';
 
 
@@ -29,7 +26,7 @@ interface EarthquakeInfo {
   isFinal?: boolean;
   isCancel?: boolean;
   tsunamiInfo?: string; // JMA specific
-  intensityLabel?: string; // --- NEW: Centralized label logic
+  intensityLabel?: string;
 }
 
 interface Obstacle {
@@ -81,7 +78,6 @@ function lightenHex(hex: string, percent: number): string {
     return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
 }
 
-// --- NEW: Time parsing helper for EEW ---
 const parseEewTime = (timeStr: string | undefined, timezoneOffset: number): Date | null => {
     if (!timeStr) return null;
     const cleanedStr = timeStr.replace(/\//g, '-').trim();
@@ -108,7 +104,6 @@ export default function App() {
   const [isCustomColorModalOpen, setIsCustomColorModalOpen] = useState(false);
   const [tempCustomColor, setTempCustomColor] = useState(localStorage.getItem('hs-custom-color') || '#f1f5f9');
 
-  // --- NEW: Feature hooks ---
   const dailyGreeting = useDailyGreeting();
   
   const setCustomPalette = useCallback((color: string) => {
@@ -357,7 +352,6 @@ export default function App() {
   const lastEventIdRef = useRef<Record<string, string | null>>({});
   const [eewRippleKey, setEewRippleKey] = useState(0);
 
-  // --- REWORKED & FIXED: Unified EEW Parser (more robust) ---
   const parseEewData = useCallback((data: any, sourceIdentifier: string): EarthquakeInfo | null => {
     try {
       if (!data || typeof data !== 'object' || Object.keys(data).length === 0 || data.type === 'heartbeat') {
@@ -403,8 +397,6 @@ export default function App() {
     }
   }, []);
 
-
-  // --- REWORKED: GET Polling for Real-time EEW ---
   useEffect(() => {
     const eewSources = [
         { name: 'jma_eew', tz: 9 },
@@ -453,8 +445,8 @@ export default function App() {
         }
     };
 
-    poll(); // Initial poll
-    const intervalId = setInterval(poll, 7000); // Poll every 7 seconds
+    poll();
+    const intervalId = setInterval(poll, 7000);
 
     return () => clearInterval(intervalId);
   }, [parseEewData]);
@@ -468,9 +460,6 @@ export default function App() {
   
   const [isGlitched, setIsGlitched] = useState(false);
   const [designColorIndex, setDesignColorIndex] = useState(0);
-
-  const [showConfetti, setShowConfetti] = useState(false);
-  const [isCooldown, setIsCooldown] = useState(false);
 
   const [obstacles, setObstacles] = useState<Obstacle[]>([]);
   const [uiIndicators, setUiIndicators] = useState<Record<string, { style: React.CSSProperties }>>({});
@@ -611,17 +600,7 @@ export default function App() {
         });
     }, 500);
   }, []);
-
-  const handleConfettiClick = () => {
-    if (isCooldown) return;
-    setShowConfetti(true);
-    setIsCooldown(true);
-    setTimeout(() => { setIsCooldown(false); }, 30000);
-  };
   
-  const onAnimationEnd = useCallback(() => { setShowConfetti(false); }, []);
-
-  // --- Multi-source EEW fetch handler ---
   const handleEewSourceClick = async (source: 'jma' | 'sc' | 'cenc' | 'fj') => {
     setIsModalOpen(true);
     setIsLoading(true);
@@ -739,7 +718,6 @@ export default function App() {
     }
   ];
   
-  // --- NEW: Added hex colors for timeline interaction ---
   const timelineData = [
       { year: '2022', text: '开始学习编程 (Scratch)', color: 'bg-orange-400', hex: '#fb923c' },
       { year: '2023', text: '学习 Python', color: 'bg-sky-400', hex: '#38bdf8' },
@@ -752,14 +730,13 @@ export default function App() {
   return (
     <main 
       ref={mainRef} 
-      className="relative h-screen text-[rgb(var(--text-primary))] antialiased overflow-hidden"
+      className="relative h-screen text-[rgb(var(--text-primary))] antialiased overflow-hidden transition-colors duration-700 ease-in-out"
     >
       <div 
         className="fixed inset-0 z-0 transition-colors duration-700 ease-in-out"
         style={{ backgroundColor: `rgb(${sectionBgVars[activeSection]})` }}
       />
 
-      {/* --- NEW: EEW Ripple Effect --- */}
       {eewRippleKey > 0 && <div key={eewRippleKey} className="eew-ripple-effect"></div>}
 
       <div
@@ -797,8 +774,6 @@ export default function App() {
         style={{ '--vignette-size': `${400 - vignetteProgress * 300}px` } as React.CSSProperties}
       />
       
-      {showConfetti && <Confetti onAnimationEnd={onAnimationEnd} />}
-
       <div className="fixed top-4 left-1/2 -translate-x-1/2 w-full max-w-md px-4 pointer-events-auto z-30" data-obstacle="true" data-id="countdown">
          <ProgrammerDayCountdown />
       </div>
@@ -819,20 +794,20 @@ export default function App() {
       ))}
       
       {toastInfo && (
-        <div className="fixed top-5 right-5 z-50 w-full max-w-sm bg-[rgb(var(--background-card))] backdrop-blur-md rounded-lg shadow-lg pointer-events-auto ring-1 ring-[rgb(var(--ring-primary))] overflow-hidden animate-toast-in-right">
+        <div className="fixed top-5 right-5 z-50 w-full max-w-sm bg-[rgb(var(--background-card))] backdrop-blur-md rounded-lg shadow-lg pointer-events-auto ring-1 ring-[rgb(var(--ring-primary))] overflow-hidden animate-toast-in-right transition-colors duration-700 ease-in-out">
           <div className="p-4">
             <div className="flex items-start">
               <div className="flex-shrink-0 pt-0.5">
                 <EarthquakeIcon className="h-6 w-6 text-blue-600" />
               </div>
               <div className="ml-3 w-0 flex-1">
-                <p className="text-sm font-semibold text-[rgb(var(--text-primary))]">新地震速报 ({toastInfo.source})</p>
-                <p className="mt-1 text-sm text-[rgb(var(--text-tertiary))]">{toastInfo.message}</p>
+                <p className="text-sm font-semibold text-[rgb(var(--text-primary))] transition-colors duration-700 ease-in-out">新地震速报 ({toastInfo.source})</p>
+                <p className="mt-1 text-sm text-[rgb(var(--text-tertiary))] transition-colors duration-700 ease-in-out">{toastInfo.message}</p>
               </div>
               <div className="ml-4 flex-shrink-0 flex">
                 <button
                   onClick={() => { setToastInfo(null); }}
-                  className="inline-flex text-[rgb(var(--text-quaternary))] rounded-md hover:text-[rgb(var(--text-tertiary))] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                  className="inline-flex text-[rgb(var(--text-quaternary))] rounded-md hover:text-[rgb(var(--text-tertiary))] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors duration-700 ease-in-out"
                 >
                   <span className="sr-only">Close</span>
                   <svg className="h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
@@ -846,27 +821,8 @@ export default function App() {
       )}
 
       <button
-        onClick={handleConfettiClick}
-        disabled={isCooldown}
-        className={`fixed bottom-4 left-4 z-40 p-3 bg-[rgb(var(--background-button))] rounded-full shadow-lg backdrop-blur-sm transition-all duration-200 pointer-events-auto ${
-          isCooldown ? 'opacity-50' : 'hover:scale-110'
-        }`}
-        aria-label="撒花"
-        onMouseDown={() => !isCooldown}
-        onMouseEnter={() => { if (!isCooldown) { setIsHoveringLink(true); } }}
-        onMouseLeave={() => setIsHoveringLink(false)}
-        data-obstacle="true" data-id="confetti-button"
-      >
-        {isCooldown ? (
-          <ClockIcon className="w-6 h-6 text-[rgb(var(--text-tertiary))]" />
-        ) : (
-          <PartyPopperIcon className="w-6 h-6 text-rose-500" />
-        )}
-      </button>
-
-      <button
         onClick={() => { setIsHelpModalOpen(true); }}
-        className="fixed bottom-4 left-20 z-40 p-3 bg-[rgb(var(--background-button))] rounded-full shadow-lg backdrop-blur-sm transition-all duration-200 hover:scale-110 pointer-events-auto"
+        className="fixed bottom-4 left-4 z-40 p-3 bg-[rgb(var(--background-button))] rounded-full shadow-lg backdrop-blur-sm transition-all duration-200 hover:scale-110 pointer-events-auto"
         aria-label="帮助"
         onMouseEnter={() => { setIsHoveringLink(true); }}
         onMouseLeave={() => setIsHoveringLink(false)}
@@ -889,8 +845,8 @@ export default function App() {
       {isPaletteModalOpen && (
         <div className="fixed inset-0 z-40 flex items-center justify-center p-4 pointer-events-auto">
           <div className="absolute inset-0 bg-black/40 animate-fadeIn" onClick={() => { setIsPaletteModalOpen(false); }}></div>
-          <div className="relative flex flex-col items-center gap-4 bg-[rgb(var(--background-card))] p-6 sm:p-8 rounded-lg border border-[rgb(var(--border-primary))] shadow-lg text-left animate-scaleUp">
-              <h3 className="text-lg font-semibold text-[rgb(var(--text-secondary))]">选择背景</h3>
+          <div className="relative flex flex-col items-center gap-4 bg-[rgb(var(--background-card))] p-6 sm:p-8 rounded-lg border border-[rgb(var(--border-primary))] shadow-lg text-left animate-scaleUp transition-colors duration-700 ease-in-out">
+              <h3 className="text-lg font-semibold text-[rgb(var(--text-secondary))] transition-colors duration-700 ease-in-out">选择背景</h3>
               <div className="grid grid-cols-4 sm:grid-cols-4 gap-4">
                   {palettes.map(p => (
                       <button 
@@ -904,7 +860,7 @@ export default function App() {
                           className={`flex flex-col items-center gap-2 p-2 rounded-md transition-all ${palette === p.id ? 'ring-2 ring-blue-500' : 'hover:bg-slate-500/10'}`}
                       >
                           <div className={`w-10 h-10 rounded-full ${p.bg}`}></div>
-                          <span className="text-xs text-[rgb(var(--text-tertiary))]">{p.name}</span>
+                          <span className="text-xs text-[rgb(var(--text-tertiary))] transition-colors duration-700 ease-in-out">{p.name}</span>
                       </button>
                   ))}
                   <button
@@ -917,7 +873,7 @@ export default function App() {
                       className={`flex flex-col items-center gap-2 p-2 rounded-md transition-all ${palette === 'custom' ? 'ring-2 ring-blue-500' : 'hover:bg-slate-500/10'}`}
                   >
                       <div className="w-10 h-10 rounded-full bg-gradient-to-br from-red-400 via-yellow-400 to-blue-400"></div>
-                      <span className="text-xs text-[rgb(var(--text-tertiary))]">自定义</span>
+                      <span className="text-xs text-[rgb(var(--text-tertiary))] transition-colors duration-700 ease-in-out">自定义</span>
                   </button>
               </div>
           </div>
@@ -927,8 +883,8 @@ export default function App() {
       {isCustomColorModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-auto">
           <div className="absolute inset-0 bg-black/40 animate-fadeIn" onClick={() => setIsCustomColorModalOpen(false)}></div>
-           <div className="relative flex flex-col items-center gap-6 bg-[rgb(var(--background-card))] p-6 sm:p-8 rounded-lg border border-[rgb(var(--border-primary))] shadow-lg text-left animate-scaleUp">
-              <h3 className="text-lg font-semibold text-[rgb(var(--text-secondary))]">自定义背景颜色</h3>
+           <div className="relative flex flex-col items-center gap-6 bg-[rgb(var(--background-card))] p-6 sm:p-8 rounded-lg border border-[rgb(var(--border-primary))] shadow-lg text-left animate-scaleUp transition-colors duration-700 ease-in-out">
+              <h3 className="text-lg font-semibold text-[rgb(var(--text-secondary))] transition-colors duration-700 ease-in-out">自定义背景颜色</h3>
               <div className="flex items-center justify-center gap-4">
                   <input
                       type="color"
@@ -937,8 +893,8 @@ export default function App() {
                       className="w-16 h-16 p-0 border-none rounded-md"
                   />
                   <div className="flex flex-col">
-                    <span className="text-sm text-[rgb(var(--text-quaternary))]">当前颜色</span>
-                    <span className="font-mono text-lg text-[rgb(var(--text-secondary))]">{tempCustomColor}</span>
+                    <span className="text-sm text-[rgb(var(--text-quaternary))] transition-colors duration-700 ease-in-out">当前颜色</span>
+                    <span className="font-mono text-lg text-[rgb(var(--text-secondary))] transition-colors duration-700 ease-in-out">{tempCustomColor}</span>
                   </div>
               </div>
               <button
@@ -956,7 +912,7 @@ export default function App() {
       {isHelpModalOpen && (
         <div className="fixed inset-0 z-40 flex items-center justify-center p-4 pointer-events-auto">
             <div className="absolute inset-0 bg-black/40 animate-fadeIn" onClick={() => setIsHelpModalOpen(false)}></div>
-            <div className="relative w-full max-w-4xl bg-[rgb(var(--background-card))] p-6 sm:p-8 rounded-lg border border-[rgb(var(--border-primary))] shadow-lg text-left animate-scaleUp">
+            <div className="relative w-full max-w-4xl bg-[rgb(var(--background-card))] p-6 sm:p-8 rounded-lg border border-[rgb(var(--border-primary))] shadow-lg text-left animate-scaleUp transition-colors duration-700 ease-in-out">
                 <button
                     onClick={() => { setIsHelpModalOpen(false); }}
                     className="absolute top-4 right-4 text-[rgb(var(--text-quaternary))] hover:text-[rgb(var(--text-tertiary))] transition-colors"
@@ -966,13 +922,13 @@ export default function App() {
                         <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                     </svg>
                 </button>
-                <h2 className="text-2xl font-bold tracking-tight mb-6 text-center text-[rgb(var(--text-secondary))]">隐藏功能说明</h2>
+                <h2 className="text-2xl font-bold tracking-tight mb-6 text-center text-[rgb(var(--text-secondary))] transition-colors duration-700 ease-in-out">隐藏功能说明</h2>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                     {hiddenFeatures.map((feature, index) => (
                         <div key={index} className="bg-slate-400/10 p-4 rounded-lg flex flex-col items-center text-center backdrop-blur-sm">
                             <div className="flex-shrink-0 mb-3">{feature.icon}</div>
-                            <h3 className="text-md font-semibold text-[rgb(var(--text-secondary))] mb-1">{feature.title}</h3>
-                            <p className="text-sm text-[rgb(var(--text-tertiary))]">{feature.description}</p>
+                            <h3 className="text-md font-semibold text-[rgb(var(--text-secondary))] mb-1 transition-colors duration-700 ease-in-out">{feature.title}</h3>
+                            <p className="text-sm text-[rgb(var(--text-tertiary))] transition-colors duration-700 ease-in-out">{feature.description}</p>
                         </div>
                     ))}
                 </div>
@@ -991,19 +947,19 @@ export default function App() {
 
       <div ref={scrollContainerRef} className="relative z-20 h-screen w-full overflow-y-scroll pointer-events-none">
         <section ref={homeRef} id="home" className="relative h-screen w-full snap-start flex flex-col items-center justify-center text-center p-4 sm:p-8">
-          <div className="relative flex flex-col items-center bg-[rgb(var(--background-frosted))] backdrop-blur-md px-12 py-8 pointer-events-auto relative z-30" data-obstacle="true" data-id="hero-title">
+          <div className="relative flex flex-col items-center bg-[rgb(var(--background-frosted))] backdrop-blur-md px-12 py-8 pointer-events-auto relative z-30 transition-colors duration-700 ease-in-out" data-obstacle="true" data-id="hero-title">
             <h1 
-              className="text-6xl sm:text-8xl font-bold text-[rgb(var(--text-secondary))] tracking-tighter"
+              className="text-6xl sm:text-8xl font-bold text-[rgb(var(--text-secondary))] tracking-tighter transition-colors duration-700 ease-in-out"
               onClick={handleTitleClick}
               role="button"
               tabIndex={0}
             >
               Huo_sai
             </h1>
-            <p className="mt-4 text-lg sm:text-xl text-[rgb(var(--text-tertiary))] tracking-wide">
+            <p className="mt-4 text-lg sm:text-xl text-[rgb(var(--text-tertiary))] tracking-wide transition-colors duration-700 ease-in-out">
               {welcomeBackMessage || dailyGreeting}
             </p>
-            <p className="mt-2 text-base text-[rgb(var(--text-quaternary))]">
+            <p className="mt-2 text-base text-[rgb(var(--text-quaternary))] transition-colors duration-700 ease-in-out">
               ({age}岁)
             </p>
           </div>
@@ -1012,7 +968,7 @@ export default function App() {
             aria-hidden="true"
           >
             <div className="text-[rgb(var(--text-quaternary))]">
-              <p className="mb-2 text-xs tracking-wider">滚动浏览</p>
+              <p className="mb-2 text-xs tracking-wider transition-colors duration-700 ease-in-out">滚动浏览</p>
               <svg className="w-6 h-6 mx-auto animate-bounce-slow" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 17l-4 4m0 0l-4-4m4 4V3" />
               </svg>
@@ -1022,10 +978,10 @@ export default function App() {
 
         <section ref={aboutRef} id="about" className="h-screen w-full snap-start flex flex-col items-center justify-center p-4 sm:p-8">
           <div className="relative w-full max-w-4xl text-center pointer-events-auto z-30">
-            <h2 className="text-4xl sm:text-5xl font-bold tracking-tight mb-12 text-[rgb(var(--text-secondary))]" data-obstacle="true" data-id="about-title">关于我</h2>
+            <h2 className="text-4xl sm:text-5xl font-bold tracking-tight mb-12 text-[rgb(var(--text-secondary))] transition-colors duration-700 ease-in-out" data-obstacle="true" data-id="about-title">关于我</h2>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8 text-left" data-obstacle="true" data-id="about-cards">
               <div
-                className="bg-[rgb(var(--background-card))] p-6 rounded-lg border border-[rgb(var(--border-primary))] shadow-sm transition-transform hover:scale-105 duration-300 pointer-events-auto"
+                className="bg-[rgb(var(--background-card))] p-6 rounded-lg border border-[rgb(var(--border-primary))] shadow-sm transition-transform hover:scale-105 duration-300 pointer-events-auto transition-colors"
                 onClick={handleCodeCardClick} role="button" tabIndex={0}
                 onKeyDown={(e) => e.key === 'Enter' && handleCodeCardClick()}
                 onMouseEnter={() => { setIsHoveringLink(true); }} onMouseLeave={() => setIsHoveringLink(false)}
@@ -1034,18 +990,18 @@ export default function App() {
                   <div className="bg-blue-100 p-3 rounded-full flex-shrink-0">
                     <CodeIcon className="w-6 h-6 text-blue-600" />
                   </div>
-                  <h3 className="text-xl font-semibold text-[rgb(var(--text-secondary))]">编程</h3>
+                  <h3 className="text-xl font-semibold text-[rgb(var(--text-secondary))] transition-colors duration-700 ease-in-out">编程</h3>
                 </div>
-                <p className={`mt-4 text-[rgb(var(--text-tertiary))] ${isGlitched ? 'animate-glitch' : ''}`}>主修 C++，享受用代码构建逻辑和解决问题的过程。</p>
+                <p className={`mt-4 text-[rgb(var(--text-tertiary))] ${isGlitched ? 'animate-glitch' : ''} transition-colors duration-700 ease-in-out`}>主修 C++，享受用代码构建逻辑和解决问题的过程。</p>
               </div>
               <div 
-                className="bg-[rgb(var(--background-card))] p-6 rounded-lg border border-[rgb(var(--border-primary))] shadow-sm transition-transform duration-300 pointer-events-auto"
+                className="bg-[rgb(var(--background-card))] p-6 rounded-lg border border-[rgb(var(--border-primary))] shadow-sm transition-transform duration-300 pointer-events-auto transition-colors"
               >
                 <div className="flex items-center gap-4 mb-4">
                   <div className="bg-red-100 p-3 rounded-full flex-shrink-0">
                     <ZapIcon className="w-6 h-6 text-red-600" />
                   </div>
-                  <h3 className="text-xl font-semibold text-[rgb(var(--text-secondary))]">EEW</h3>
+                  <h3 className="text-xl font-semibold text-[rgb(var(--text-secondary))] transition-colors duration-700 ease-in-out">EEW</h3>
                 </div>
                  <div className="grid grid-cols-2 gap-2 text-center">
                     <button onClick={() => handleEewSourceClick('jma')} onMouseEnter={() => { setIsHoveringLink(true); }} onMouseLeave={() => setIsHoveringLink(false)} className="text-sm bg-red-500/10 text-red-700 font-semibold py-2 px-2 rounded-md hover:bg-red-500/20 transition-colors">日本(JMA)</button>
@@ -1055,7 +1011,7 @@ export default function App() {
                  </div>
               </div>
               <div
-                className="bg-[rgb(var(--background-card))] p-6 rounded-lg border border-[rgb(var(--border-primary))] shadow-sm transition-transform hover:scale-105 duration-300 pointer-events-auto"
+                className="bg-[rgb(var(--background-card))] p-6 rounded-lg border border-[rgb(var(--border-primary))] shadow-sm transition-transform hover:scale-105 duration-300 pointer-events-auto transition-colors"
                 onClick={handleDesignCardClick} role="button" tabIndex={0}
                 onKeyDown={(e) => e.key === 'Enter' && handleDesignCardClick()}
                 onMouseEnter={() => { setIsHoveringLink(true); }} onMouseLeave={() => setIsHoveringLink(false)}
@@ -1064,9 +1020,9 @@ export default function App() {
                   <div className={`p-3 rounded-full flex-shrink-0 transition-colors duration-300 ${designColors[designColorIndex].bg}`}>
                     <DesignIcon className={`w-6 h-6 transition-colors duration-300 ${designColors[designColorIndex].text}`} />
                   </div>
-                  <h3 className="text-xl font-semibold text-[rgb(var(--text-secondary))]">设计</h3>
+                  <h3 className="text-xl font-semibold text-[rgb(var(--text-secondary))] transition-colors duration-700 ease-in-out">设计</h3>
                 </div>
-                <p className="mt-4 text-[rgb(var(--text-tertiary))]">热爱简洁、明快的设计风格，相信“少即是多”。</p>
+                <p className="mt-4 text-[rgb(var(--text-tertiary))] transition-colors duration-700 ease-in-out">热爱简洁、明快的设计风格，相信“少即是多”。</p>
               </div>
             </div>
           </div>
@@ -1074,7 +1030,7 @@ export default function App() {
 
         <section ref={timelineRef} id="timeline" className="h-screen w-full snap-start flex flex-col items-center justify-center p-4 sm:p-8">
           <div className="relative w-full max-w-4xl text-center pointer-events-auto z-30">
-            <h2 className="text-4xl sm:text-5xl font-bold tracking-tight mb-16 text-[rgb(var(--text-secondary))]" data-obstacle="true" data-id="timeline-title">
+            <h2 className="text-4xl sm:text-5xl font-bold tracking-tight mb-16 text-[rgb(var(--text-secondary))] transition-colors duration-700 ease-in-out" data-obstacle="true" data-id="timeline-title">
               编程之旅
             </h2>
             <div className="relative w-full max-w-3xl mx-auto pointer-events-auto" data-obstacle="true" data-id="timeline-cards">
@@ -1087,9 +1043,9 @@ export default function App() {
                   onMouseLeave={() => setHoveredTimelineColor(null)}
                 >
                   <div className={`w-full md:w-5/12 ${index % 2 === 0 ? 'md:text-right' : 'md:text-left'}`}>
-                    <div className="bg-[rgb(var(--background-card))] p-5 rounded-lg border border-[rgb(var(--border-primary))] shadow-sm ml-12 md:ml-0">
-                      <h3 className="font-bold text-lg text-[rgb(var(--text-secondary))]">{item.year}</h3>
-                      <p className="text-sm text-[rgb(var(--text-tertiary))] mt-1">{item.text}</p>
+                    <div className="bg-[rgb(var(--background-card))] p-5 rounded-lg border border-[rgb(var(--border-primary))] shadow-sm ml-12 md:ml-0 transition-colors duration-700 ease-in-out">
+                      <h3 className="font-bold text-lg text-[rgb(var(--text-secondary))] transition-colors duration-700 ease-in-out">{item.year}</h3>
+                      <p className="text-sm text-[rgb(var(--text-tertiary))] mt-1 transition-colors duration-700 ease-in-out">{item.text}</p>
                     </div>
                   </div>
                   <div className="absolute left-4 md:left-1/2 z-10 flex items-center justify-center w-8 h-8 rounded-full -translate-x-1/2 ring-4 ring-white">
@@ -1103,20 +1059,20 @@ export default function App() {
         
         <section ref={contactRef} id="contact" className="h-screen w-full snap-start flex flex-col items-center justify-center p-4 sm:p-8">
           <div className="relative w-full max-w-4xl text-center pointer-events-auto z-30">
-            <h2 className="text-4xl sm:text-5xl font-bold tracking-tight mb-8 text-[rgb(var(--text-secondary))]" data-obstacle="true" data-id="contact-title">联系我</h2>
+            <h2 className="text-4xl sm:text-5xl font-bold tracking-tight mb-8 text-[rgb(var(--text-secondary))] transition-colors duration-700 ease-in-out" data-obstacle="true" data-id="contact-title">联系我</h2>
             <div className="flex justify-center items-center gap-8 pointer-events-auto" data-obstacle="true" data-id="contact-links">
               <a href="mailto:albert.tang_1a@hotmail.com" className="group" onMouseEnter={() => { setIsHoveringLink(true); }} onMouseLeave={() => setIsHoveringLink(false)}>
                 <div className="flex flex-col items-center gap-2">
                   <MailIcon className="w-10 h-10 text-[rgb(var(--text-quaternary))] group-hover:text-[rgb(var(--text-link-hover))] transition-colors" />
                   <span className="text-[rgb(var(--text-tertiary))] group-hover:text-[rgb(var(--text-link-hover))] transition-colors">邮箱</span>
-                  <p className="text-sm text-[rgb(var(--text-quaternary))] mt-1">albert.tang_1a@hotmail.com</p>
+                  <p className="text-sm text-[rgb(var(--text-quaternary))] mt-1 transition-colors duration-700 ease-in-out">albert.tang_1a@hotmail.com</p>
                 </div>
               </a>
               <a href="https://github.com/albertjiayou0423" target="_blank" rel="noopener noreferrer" className="group" onMouseEnter={() => { setIsHoveringLink(true); }} onMouseLeave={() => setIsHoveringLink(false)}>
                  <div className="flex flex-col items-center gap-2">
                   <GithubIcon className="w-10 h-10 text-[rgb(var(--text-quaternary))] group-hover:text-[rgb(var(--text-link-gh-hover))] transition-colors" />
                   <span className="text-[rgb(var(--text-tertiary))] group-hover:text-[rgb(var(--text-link-gh-hover))] transition-colors">GitHub</span>
-                  <p className="text-sm text-[rgb(var(--text-quaternary))] mt-1">albertjiayou0423</p>
+                  <p className="text-sm text-[rgb(var(--text-quaternary))] mt-1 transition-colors duration-700 ease-in-out">albertjiayou0423</p>
                 </div>
               </a>
             </div>
@@ -1126,7 +1082,7 @@ export default function App() {
         {isModalOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-auto">
             <div className="absolute inset-0 bg-black/50 animate-fadeIn" onClick={() => { setIsModalOpen(false); }}></div>
-            <div className="relative bg-[rgb(var(--background-card))] rounded-lg shadow-xl w-full max-w-md text-left overflow-hidden animate-scaleUp">
+            <div className="relative bg-[rgb(var(--background-card))] rounded-lg shadow-xl w-full max-w-md text-left overflow-hidden animate-scaleUp transition-colors duration-700 ease-in-out">
                 <div className="bg-blue-500 text-white p-4 flex justify-between items-center">
                     <div className="flex items-center gap-3">
                         <ZapIcon className="w-6 h-6" />
@@ -1140,16 +1096,15 @@ export default function App() {
                         <div>
                             <div className="grid grid-cols-2 gap-4 mb-6 text-center">
                                 <div>
-                                    {/* --- MODIFIED: Use the correct intensityLabel from data --- */}
-                                    <p className="text-sm text-[rgb(var(--text-quaternary))]">{earthquakeData.intensityLabel || '最大烈度'}</p>
-                                    <p className="text-5xl font-bold text-[rgb(var(--text-primary))]">{earthquakeData.maxInt || 'N/A'}</p>
+                                    <p className="text-sm text-[rgb(var(--text-quaternary))] transition-colors duration-700 ease-in-out">{earthquakeData.intensityLabel || '最大烈度'}</p>
+                                    <p className="text-5xl font-bold text-[rgb(var(--text-primary))] transition-colors duration-700 ease-in-out">{earthquakeData.maxInt || 'N/A'}</p>
                                 </div>
                                 <div>
-                                    <p className="text-sm text-[rgb(var(--text-quaternary))]">震级</p>
-                                    <p className="text-5xl font-bold text-[rgb(var(--text-primary))]">{earthquakeData.magnitude ? `M${earthquakeData.magnitude}` : 'N/A'}</p>
+                                    <p className="text-sm text-[rgb(var(--text-quaternary))] transition-colors duration-700 ease-in-out">震级</p>
+                                    <p className="text-5xl font-bold text-[rgb(var(--text-primary))] transition-colors duration-700 ease-in-out">{earthquakeData.magnitude ? `M${earthquakeData.magnitude}` : 'N/A'}</p>
                                 </div>
                             </div>
-                            <ul className="space-y-2 text-sm text-[rgb(var(--text-secondary))] border-t border-[rgb(var(--border-primary))] pt-4">
+                            <ul className="space-y-2 text-sm text-[rgb(var(--text-secondary))] border-t border-[rgb(var(--border-primary))] pt-4 transition-colors duration-700 ease-in-out">
                                 <li><strong>震源地:</strong> {earthquakeData.hypocenter}</li>
                                 {earthquakeData.depth !== 'N/A' && <li><strong>深度:</strong> {earthquakeData.depth}</li>}
                                 <li><strong>发生时间:</strong> {earthquakeData.originTime}</li>
@@ -1157,7 +1112,7 @@ export default function App() {
                                 {earthquakeData.tsunamiInfo && <li><strong>海啸情报:</strong> {earthquakeData.tsunamiInfo}</li>}
                                 {typeof earthquakeData.isFinal === 'boolean' && <li><strong>最终报:</strong> {earthquakeData.isFinal ? '是' : '否'}</li>}
                                 {typeof earthquakeData.isCancel === 'boolean' && <li className="font-bold text-red-500"><strong>取消报:</strong> {earthquakeData.isCancel ? '是' : '否'}</li>}
-                                <li className="text-xs text-[rgb(var(--text-quaternary))] pt-2">Event ID: {earthquakeData.eventId}</li>
+                                <li className="text-xs text-[rgb(var(--text-quaternary))] pt-2 transition-colors duration-700 ease-in-out">Event ID: {earthquakeData.eventId}</li>
                             </ul>
                         </div>
                     )}
